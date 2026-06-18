@@ -7,8 +7,10 @@ import {
   ListItemText,
   Button,
   Divider,
+  IconButton,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { Chat } from "./types";
 
 interface SidebarProps {
@@ -16,6 +18,7 @@ interface SidebarProps {
   activeChat: Chat | null;
   onSelectChat: (chat: Chat) => void;
   onNewChat: () => void;
+  onDeleteChat: (chatId: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -23,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeChat,
   onSelectChat,
   onNewChat,
+  onDeleteChat,
 }) => {
   return (
     <Box
@@ -32,7 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         display: "flex",
         flexDirection: "column",
         borderRight: "1px solid #333",
-        height: "100vh",
+        height: "100%",
       }}
     >
       <Box sx={{ p: 2 }}>
@@ -63,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 borderRadius: "8px",
                 backgroundColor:
                   activeChat?.id === chat.id ? "#2a2a2a" : "transparent",
-                "&:hover": { backgroundColor: "#2a2a2a" },
+                "&:hover": { backgroundColor: "black" },
                 "&.Mui-selected": {
                   backgroundColor: "#2a2a2a",
                 },
@@ -86,6 +90,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   },
                 }}
               />
+              <IconButton
+                size="small"
+                aria-label="Delete chat"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteChat(chat.id);
+                }}
+                sx={{ color: "#888", "&:hover": { color: "#fff" } }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
             </ListItemButton>
           </ListItem>
         ))}
