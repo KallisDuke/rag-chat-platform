@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Box, CssBaseline, keyframes } from "@mui/material";
+import { Box, CssBaseline, IconButton, keyframes } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { Sidebar } from "./Sidebar";
+import { Navbar } from "./Navbar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { Chat, Message } from "./types";
+import MenuIcon from "@mui/icons-material/Menu";
 
 const dancingDots = keyframes`
   0%, 20%, 50%, 80%, 100% {
@@ -39,6 +41,8 @@ export default function ChatPage() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const handleNewChat = () => {
     const newChat: Chat = {
       id: Date.now().toString(),
@@ -49,6 +53,13 @@ export default function ChatPage() {
     };
     setChats([newChat, ...chats]);
     setActiveChat(newChat);
+  };
+
+  const handleDeleteChat = (chatId: string) => {
+    setChats(chats.filter((chat) => chat.id !== chatId));
+    if (activeChat?.id === chatId) {
+      setActiveChat(null);
+    }
   };
 
   const handleSendMessage = async (content: string, files?: any[]) => {
@@ -160,41 +171,66 @@ export default function ChatPage() {
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Box
-        sx={{ display: "flex", height: "100vh", backgroundColor: "#0d0d0d" }}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          backgroundColor: "#0d0d0d",
+        }}
       >
-        <Sidebar
-          chats={chats}
-          activeChat={activeChat}
-          onSelectChat={setActiveChat}
-          onNewChat={handleNewChat}
-        />
-        <Box
-          sx={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            backgroundColor: "#0d0d0d",
-          }}
-        >
-          {activeChat ? (
-            <>
-              <MessageList messages={activeChat.messages} />
-              <ChatInput onSendMessage={handleSendMessage} />
-            </>
-          ) : (
-            <Box
-              sx={{
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#888",
-                fontSize: "1.1rem",
-              }}
+        <Navbar />
+        <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
+          <Box
+            sx={{
+              width: sidebarOpen ? 260 : 0,
+              overflow: "hidden",
+              transition: "width 0.3s ease",
+            }}
+          >
+            <Sidebar
+              chats={chats}
+              activeChat={activeChat}
+              onSelectChat={setActiveChat}
+              onNewChat={handleNewChat}
+              onDeleteChat={handleDeleteChat}
+            />
+          </Box>
+          <Box sx={{ p: 1 }}>
+            <IconButton
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              sx={{ color: "white" }}
             >
-              Select or create a chat to start
-            </Box>
-          )}
+              <MenuIcon />
+            </IconButton>
+          </Box>
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              backgroundColor: "#0d0d0d",
+            }}
+          >
+            {activeChat ? (
+              <>
+                <MessageList messages={activeChat.messages} />
+                <ChatInput onSendMessage={handleSendMessage} />
+              </>
+            ) : (
+              <Box
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#888",
+                  fontSize: "1.1rem",
+                }}
+              >
+                Select or create a chat to start
+              </Box>
+            )}
+          </Box>
         </Box>
       </Box>
     </ThemeProvider>

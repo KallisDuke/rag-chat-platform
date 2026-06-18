@@ -45,7 +45,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         display: "flex",
         justifyContent: isUser ? "flex-end" : "flex-start",
         mb: 3,
-        maxWidth: "100%",
+        width: "100%",
+        maxWidth: "80%",
+        mx: "auto",
       }}
     >
       <Paper
@@ -66,6 +68,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
               lineHeight: 1.4,
               color: isUser ? "white" : "#ececec",
               textAlign: isUser ? "center" : "left",
+              whiteSpace: "pre-wrap",
               ...(message.content === "..." && {
                 "& span": {
                   display: "inline-block",
