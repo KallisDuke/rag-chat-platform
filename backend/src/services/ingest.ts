@@ -8,12 +8,14 @@ interface StoredDocumentChunk {
   content: string;
   embedding: number[];
   source: string;
+  sizeBytes: number;
   createdAt: Date;
 }
 
 export const ingestDocument = async (
   text: string,
   fileName: string,
+  sizeBytes: number,
 ): Promise<number> => {
   const collectionName = process.env.COLLECTION_NAME;
 
@@ -37,6 +39,7 @@ export const ingestDocument = async (
       content: chunk.pageContent,
       embedding: vector,
       source: fileName,
+      sizeBytes,
       createdAt: new Date(),
     });
   }

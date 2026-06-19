@@ -1,0 +1,775 @@
+================================================================================
+RAG AI PIPELINE — PROJECT DOCUMENTATION
+Retrieval-Augmented Generation chat application — full architecture & code walkthrough
+Stack: Node.js / Express 5 / TypeScript · MongoDB Atlas Vector Search · OpenAI ·
+       React 19 / Vite / MUI
+Repository root: RAG AI Pipeline (node.js)
+Branch documented: feature/file-upload-page
+Generated: 2026-06-19
+================================================================================
+
+TABLE OF CONTENTS
+------------------------------------------------------------------------------
+1.  Project Overview
+2.  Tech Stack & Dependencies
+3.  Repository Layout
+4.  High-Level Architecture
+5.  Backend — File-by-File Walkthrough
+    5.1  server.ts — application entry point
+    5.2  db/mongo.ts — database connection
+    5.3  middleware/auth.ts — JWT guard
+    5.4  routes/auth.ts — login
+    5.5  utils/embeddings.ts — shared embedding model
+    5.6  services/ingest.ts — chunk + embed + store
+    5.7  routes/upload.ts — file/text intake endpoint
+    5.8  services/rag.ts — retrieval + generation
+    5.9  routes/query.ts — question endpoint
+    5.10 services/library.ts & routes/library.ts — document inventory
+6.  Frontend — File-by-File Walkthrough
+    6.1  App shell: main.tsx, App.tsx, theme.ts, utils.ts
+    6.2  Login: LoginPage.tsx, LoginForm.tsx
+    6.3  Chat module (ChatPage, Sidebar, MessageList, MessageBubble, ChatInput, bars)
+    6.4  Upload module (UploadPage, Dropzone, LibraryTable, UploadTopBar)
+7.  End-to-End Data Flows
+8.  Environment Variables & Configuration
+9.  Running the Project
+10. Known Limitations, Gaps & Security Notes
+11. Full Source File Index
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+This repository implements a Retrieval-Augmented Generation (RAG) chat
+application: users upload documents (PDFs or text-based files), the backend
+splits them into chunks, generates vector embeddings via OpenAI, and stores
+them in MongoDB Atlas with Vector Search enabled. Users then ask
+natural-language questions in a chat UI; the backend embeds the question,
+performs a similarity search against the stored chunks, and asks an OpenAI
+chat model to answer using only the retrieved context, returning both the
+answer and the source documents it drew from.
+
+The codebase is split into two independently-managed npm projects with no
+shared root package.json:
+
+  Project       Role                                    Key technologies
+  ------------  --------------------------------------  ----------------------------------------------
+  backend/      REST API: auth, ingestion, retrieval,   Express 5, TypeScript (ESM, run via tsx),
+                and generation                          MongoDB driver, LangChain, OpenAI SDK
+  frontend/     Single-page chat & document-management  React 19, Vite, MUI 7, React Router 7
+                UI
+
+The two services are wired together for local development via
+docker-compose.yml at the repo root.
+
+
+================================================================================
+2. TECH STACK & DEPENDENCIES
+================================================================================
+
+--- Backend dependencies ---
+
+  Package                    Purpose
+  --------------------------  -----------------------------------------------------------------
+  express 5.x                 HTTP server / routing
+  mongodb 7.x                 Official MongoDB driver — connection, collections, $vectorSearch
+  mongoose 9.x                Installed but NOT used anywhere in src/ — the project talks to
+                               Mongo exclusively through the native driver (db/mongo.ts)
+  @langchain/openai            Wraps OpenAI embeddings (OpenAIEmbeddings) and chat completion
+                               (ChatOpenAI)
+  @langchain/textsplitters     RecursiveCharacterTextSplitter used to chunk uploaded documents
+  langchain / @langchain/core  Core types (e.g. ContentBlock used in the query route's response
+                               typing)
+  multer                       Multipart/form-data parsing for file uploads (memory storage)
+  pdf-parse                    Extracts text from PDF buffers (PDFParse class API)
+  jsonwebtoken                 Signs and verifies the auth JWT
+  cors                         Enables cross-origin requests from the Vite dev server
+  dotenv                       Loads backend/.env into process.env
+
+--- Frontend dependencies ---
+
+  Package                          Purpose
+  --------------------------------  -------------------------------------------------------------
+  react / react-dom 19.x            UI runtime
+  react-router-dom 7.x              Client-side routing (/login, /chat, /upload)
+  @mui/material, @mui/icons-material 7.x  Component library and icon set used throughout
+  @emotion/react, @emotion/styled   MUI's underlying CSS-in-JS engine (used directly for
+                                     keyframes animations)
+  jwt-decode                        Client-side JWT payload decoding for route guarding (no
+                                     signature check)
+  vite 7.x / @vitejs/plugin-react   Dev server and build tooling
+
+
+================================================================================
+3. REPOSITORY LAYOUT
+================================================================================
+
+RAG AI Pipeline (node.js)/
+|-- docker-compose.yml          # runs frontend + backend together for local dev
+|-- backend/
+|   |-- package.json
+|   |-- .env                    # not checked in -- required secrets/config
+|   `-- src/
+|       |-- server.ts           # Express app entry point
+|       |-- db/mongo.ts         # connectDB() / getDB() singleton
+|       |-- middleware/auth.ts  # JWT verification middleware
+|       |-- routes/
+|       |   |-- auth.ts         # POST /login
+|       |   |-- upload.ts       # POST /upload
+|       |   |-- query.ts        # POST /query
+|       |   `-- library.ts      # GET /library
+|       |-- services/
+|       |   |-- ingest.ts       # chunk + embed + persist
+|       |   |-- rag.ts          # vector search + LLM answer
+|       |   `-- library.ts      # aggregate stored chunks into per-document rows
+|       `-- utils/embeddings.ts # shared OpenAIEmbeddings instance
+`-- frontend/
+    |-- index.html
+    |-- vite.config.ts
+    |-- package.json
+    `-- src/
+        |-- main.tsx             # ReactDOM root, global theme + router
+        |-- App.tsx              # route table + ProtectedRoute guard
+        |-- utils.ts             # isTokenValid()
+        |-- theme/theme.ts       # global light MUI theme
+        |-- pages/
+        |   |-- LoginPage.tsx
+        |   |-- Chat/
+        |   |   |-- ChatPage.tsx
+        |   |   |-- ChatBrandBar.tsx
+        |   |   |-- ChatStatusBar.tsx
+        |   |   |-- Sidebar.tsx
+        |   |   |-- MessageList.tsx
+        |   |   |-- MessageBubble.tsx
+        |   |   |-- ChatInput.tsx
+        |   |   `-- types.ts
+        |   `-- Upload/
+        |       |-- UploadPage.tsx
+        |       |-- UploadTopBar.tsx
+        |       |-- Dropzone.tsx
+        |       |-- LibraryTable.tsx
+        |       `-- types.ts
+        `-- components/login/LoginForm.tsx
+
+NOTE — Recent restructuring (uncommitted on this branch): the old flat
+src/pages/UploadPage.tsx and src/pages/Chat/Navbar.tsx have been deleted and
+replaced by a dedicated pages/Upload/ module (UploadPage, UploadTopBar,
+Dropzone, LibraryTable) and two new Chat bars (ChatBrandBar, ChatStatusBar)
+that together replace the old navbar. A new GET /library backend endpoint and
+services/library.ts were added to back the new document table. favicon.png
+was replaced with favicon.svg.
+
+
+================================================================================
+4. HIGH-LEVEL ARCHITECTURE
+================================================================================
+
+   React SPA (Vite, :5173)                  Express API (:3000)
+
+   /login  -> LoginForm                     POST /login   -> routes/auth.ts
+   /chat   -> ChatPage    ---- JWT/fetch --> POST /query   -> routes/query.ts
+   /upload -> UploadPage                     POST /upload  -> routes/upload.ts
+              (Dropzone, LibraryTable)       GET  /library -> routes/library.ts
+                                             GET  /health  -> inline handler
+                                                      |
+                       -------------------------------+-----------------------------
+                       |                               |                            |
+            services/ingest.ts              services/rag.ts              services/library.ts
+            (chunk -> embed -> store)   (embed question -> $vectorSearch    (aggregate stored
+                       |                  -> ChatOpenAI answer)               chunks by source)
+                       |                               |                            |
+                       --------------------------------+----------------------------
+                       v
+            MongoDB Atlas -- COLLECTION_NAME
+            one document per chunk: { content, embedding, source, sizeBytes, createdAt }
+            vector index "vector_index" over the `embedding` field (must exist in Atlas)
+
+            MongoDB Atlas -- USER_COLLECTION_NAME
+            plaintext { email, password } documents checked by /login
+
+            OpenAI API
+            text-embedding-3-small (embeddings)  ·  gpt-4.1-mini (chat completion)
+
+Both /upload and /query (and the new /library) require a valid
+"Authorization: Bearer <JWT>" header verified by authMiddleware. /login is
+the only unauthenticated route. /health is also unauthenticated and used for
+liveness checks.
+
+
+================================================================================
+5. BACKEND — FILE-BY-FILE WALKTHROUGH
+================================================================================
+
+--------------------------------------------------------------------------------
+backend/src/server.ts
+--------------------------------------------------------------------------------
+The Express application entry point. Creates the app, registers global
+middleware (express.json() for body parsing and cors() to allow the Vite dev
+origin), mounts the four routers, and defines an inline GET /health handler
+that returns { message, status: "OK" }. The start() function awaits
+connectDB() BEFORE calling app.listen(), so the server never accepts traffic
+without a live MongoDB connection. If connectDB() rejects, the process logs
+the error and exits with code 1.
+
+  app.use("/upload", uploadRouter);
+  app.use("/query", queryRouter);
+  app.use("/login", loginRouter);
+  app.use("/library", libraryRouter);
+  app.get("/health", (req, res) => res.json({ message: "Health check passed", status: "OK" }));
+
+--------------------------------------------------------------------------------
+backend/src/db/mongo.ts
+--------------------------------------------------------------------------------
+Implements a single shared MongoDB Db instance as a module-level singleton.
+connectDB() reads MONGODB_URI and DB_NAME from the environment, throws if
+either is missing, opens a MongoClient, and caches the resulting Db in the
+module-scoped `db` variable. getDB() simply returns that cached instance and
+THROWS SYNCHRONOUSLY IF CALLED BEFORE connectDB() HAS RESOLVED — every
+route/service in the app relies on server.ts having already awaited the
+connection, so they never need to check for it themselves.
+
+--------------------------------------------------------------------------------
+backend/src/middleware/auth.ts
+--------------------------------------------------------------------------------
+Express middleware that protects a route by validating a Bearer token. It
+extracts the token from the Authorization header ("Bearer <token>", splitting
+on the space), returns 401 if the header is absent, returns 500 if
+JWT_SECRET is not configured on the server, otherwise calls jwt.verify() and
+attaches the decoded { userId, email } payload to req.user. Any verification
+failure (expired, malformed, wrong secret) is caught and turned into a
+generic 401 "Invalid token" response — the middleware does not distinguish
+between "expired" and "tampered" for the client.
+
+--------------------------------------------------------------------------------
+backend/src/routes/auth.ts                                          [PUBLIC]
+--------------------------------------------------------------------------------
+POST /login reads { email, password } from the JSON body and performs an
+exact-match findOne({ email, password }) against the collection named by
+USER_COLLECTION_NAME.
+
+  >> SECURITY NOTE: passwords are stored and compared in PLAINTEXT — there is
+  >> no hashing algorithm (e.g. bcrypt/argon2) anywhere in the auth path.
+  >> This is acceptable only for local development/demo purposes.
+
+On a match, it signs a JWT containing { userId: user._id.toString(), email:
+user.email } with JWT_SECRET, expiring in 1h, and returns { token }. On no
+match it returns 401; unexpected errors return 500 with the raw error
+message.
+
+--------------------------------------------------------------------------------
+backend/src/utils/embeddings.ts
+--------------------------------------------------------------------------------
+Exports one shared OpenAIEmbeddings instance configured with model
+text-embedding-3-small and the API key from OPENAI_API_KEY. Both the ingest
+service and the RAG service import this same instance so that documents and
+questions are always embedded with identical settings — necessary for the
+vector similarities to be meaningful.
+
+--------------------------------------------------------------------------------
+backend/src/services/ingest.ts
+--------------------------------------------------------------------------------
+Exports ingestDocument(text, fileName, sizeBytes): Promise<number> — the
+core write path of the pipeline. Steps:
+
+  1. Reads COLLECTION_NAME from the environment (throws if unset).
+  2. Splits the input text using RecursiveCharacterTextSplitter with
+     chunkSize: 1000 and chunkOverlap: 200 characters.
+  3. For every resulting chunk, calls embeddings.embedQuery(chunk.pageContent)
+     to get its vector, SEQUENTIALLY, one chunk at a time (no
+     batching/parallelism).
+  4. Inserts one MongoDB document per chunk: { content, embedding,
+     source: fileName, sizeBytes, createdAt: new Date() }.
+  5. Returns the total chunk count for that document.
+
+  Note: every chunk belonging to the same source file stores the SAME
+  sizeBytes (the original file's byte size, not the chunk's) — this is what
+  lets services/library.ts recover a per-document size via $first.
+
+--------------------------------------------------------------------------------
+backend/src/routes/upload.ts                                       [PROTECTED]
+--------------------------------------------------------------------------------
+POST /upload is the HTTP entry point that feeds ingestDocument. It accepts
+EITHER OR BOTH:
+
+  - raw text in the JSON/form body (optionally with a custom source name,
+    defaulting to "submitted-text.txt")
+  - one or more multipart files under any field name, parsed via
+    multer.any() with memory storage, capped at 10 MB per file and 10 files
+    per request
+
+File text extraction (extractFileText) branches on MIME type / extension:
+
+  Type                                            Handling
+  ------------------------------------------------ -------------------------------------------------
+  PDF (application/pdf or .pdf)                    Parsed with pdf-parse's PDFParse class —
+                                                    getText() then destroy() in a finally block
+  Text-like (text/* MIME, or extension in .csv     Decoded as UTF-8 directly from the in-memory
+  .html .json .log .md .rtf .text .txt .xml)       buffer
+  Anything else                                    Rejected with a thrown error naming the
+                                                    offending filename
+
+  >> The frontend's accepted-file hints advertise .docx support (see
+  >> Dropzone, section 6.4), but the backend's extractFileText has NO DOCX
+  >> BRANCH — a .docx upload would fail the MIME/extension check and throw
+  >> "Unsupported file type" unless its MIME type happens to start with
+  >> "text/" (it does not).
+
+Each text blob (the raw text field, plus each file) is ingested
+INDEPENDENTLY via ingestDocument, so a partial failure in one file does not
+roll back chunks already inserted for another. The response aggregates
+per-source chunk counts: { success, message, documents: [{ source, chunks }] }.
+
+--------------------------------------------------------------------------------
+backend/src/services/rag.ts
+--------------------------------------------------------------------------------
+Exports askQuestion(question) — the retrieval + generation core. Constructs
+one shared ChatOpenAI instance at module load (model gpt-4.1-mini). At
+request time:
+
+  1. Embeds the incoming question with the same shared embeddings instance
+     used for ingestion.
+  2. Runs a $vectorSearch aggregation stage against COLLECTION_NAME,
+     targeting Atlas index "vector_index" over the embedding field, with
+     numCandidates: 100 and limit: 5 (top-5 nearest chunks).
+  3. Concatenates the retrieved chunks' content fields with blank-line
+     separators into a single context block.
+  4. Sends a single prompt string to the LLM: "Answer using only the
+     context.\n\nContext:\n{context}\n\nQuestion:\n{question}" — no system
+     message, no conversation history, no streaming.
+  5. Returns { answer: response.content, sources: docs.map(d => ({ source:
+     d.source })) }.
+
+  Note: there is no relevance-score threshold — the top 5 nearest chunks are
+  always returned and cited, even if none are actually relevant to the
+  question (the Atlas index must pre-exist; this code does not create it).
+
+--------------------------------------------------------------------------------
+backend/src/routes/query.ts                                        [PROTECTED]
+--------------------------------------------------------------------------------
+A thin wrapper: POST /query reads { question } from the body, calls
+askQuestion(question), logs the result to the server console, and returns it
+as JSON. Errors are caught and returned as 500 { error }.
+
+--------------------------------------------------------------------------------
+backend/src/services/library.ts
+--------------------------------------------------------------------------------
+Exports listLibraryDocuments(), which derives a per-document inventory purely
+by aggregating the existing chunk-level collection — there is no separate
+"documents" collection. The aggregation pipeline:
+
+  $group: { _id: "$source", chunks: { $sum: 1 }, sizeBytes: { $first:
+            "$sizeBytes" }, indexedAt: { $max: "$createdAt" } }
+  $sort: { indexedAt: -1 }
+
+This collapses N chunk documents sharing the same source into one row each,
+with the chunk count, the (constant, per-source) byte size, and the most
+recent createdAt as the "indexed at" timestamp.
+
+--------------------------------------------------------------------------------
+backend/src/routes/library.ts                                      [PROTECTED]
+--------------------------------------------------------------------------------
+GET /library calls listLibraryDocuments(), sums chunks across all rows to get
+totalChunks, and returns { documents, totalDocuments, totalChunks }. This
+backs the knowledge-base table on the Upload page.
+
+
+================================================================================
+6. FRONTEND — FILE-BY-FILE WALKTHROUGH
+================================================================================
+
+--------------------------------------------------------------------------------
+frontend/src/main.tsx
+--------------------------------------------------------------------------------
+React 19 root bootstrap. Wraps <App /> in StrictMode, BrowserRouter, and a
+global MUI ThemeProvider using the light theme from theme/theme.ts, plus
+CssBaseline for reset styles.
+
+--------------------------------------------------------------------------------
+frontend/src/App.tsx
+--------------------------------------------------------------------------------
+Declares the entire route table:
+
+  Path      Element      Guarded?
+  --------  -----------  ------------------------
+  /         redirects to /login   --
+  /login    LoginPage    No
+  /chat     ChatPage     Yes -- ProtectedRoute
+  /upload   UploadPage   Yes -- ProtectedRoute
+
+ProtectedRoute calls isTokenValid() and renders the element or redirects to
+/login. There is no route for an unauthenticated 404 — unknown paths simply
+render nothing matched.
+
+--------------------------------------------------------------------------------
+frontend/src/utils.ts
+--------------------------------------------------------------------------------
+isTokenValid() reads localStorage["token"], decodes it client-side with
+jwt-decode, and compares its exp claim (seconds) against Date.now() (ms). IT
+NEVER VERIFIES THE JWT SIGNATURE — it only checks the expiry claim embedded
+in an unverified payload, so a client could fabricate a non-expired token
+shape, though it still wouldn't pass the backend's authMiddleware (which does
+verify the signature) on actual API calls.
+
+--------------------------------------------------------------------------------
+frontend/src/theme/theme.ts
+--------------------------------------------------------------------------------
+Defines the GLOBAL light MUI theme (primary blue #137de2, white background,
+Inter font, 16px border radius) applied in main.tsx. Note this is overridden
+locally — see below.
+
+  NOTE: Both ChatPage.tsx and UploadPage.tsx wrap themselves in their own
+  local ThemeProvider with a hand-rolled dark createTheme (background
+  #0e1411, accent gold #c8a96a, "Roboto Mono" typography). This means the
+  global light theme from theme/theme.ts only ever applies to /login — every
+  other page nests its own dark theme on top.
+
+--------------------------------------------------------------------------------
+frontend/src/pages/LoginPage.tsx + components/login/LoginForm.tsx
+--------------------------------------------------------------------------------
+LoginPage is a static two-column marketing/branding shell (dark left panel
+with editorial copy and fake metrics, light right panel hosting the form) —
+purely presentational, no state. LoginForm owns the actual logic: controlled
+email/password inputs, client-side required/email-format validation, and on
+submit:
+
+  POST http://localhost:3000/login  { email, password }
+  -> on success: localStorage.setItem("token", data.token); navigate("/chat")
+  -> on failure: shows an inline MUI <Alert> with the error message
+
+The API base URL http://localhost:3000 is hardcoded inline here (and
+independently in every other component that calls the API — there is no
+shared API client/config module).
+
+--- 6.3 Chat module — frontend/src/pages/Chat/ ---
+
+types.ts
+  Shared shapes: FileAttachment { name, size, type, data? }, SourceRef
+  { source }, Message { id, content, role, timestamp, files?, sources?,
+  durationMs? }, and Chat { id, title, messages, createdAt, updatedAt }.
+
+ChatPage.tsx
+  The stateful root of the chat experience. Holds ALL chat state in
+  component state — chats: Chat[] and activeChat: Chat | null — with no
+  persistence layer; everything is lost on refresh and chats are never
+  loaded from the backend (the backend has no chat-storage endpoints at
+  all). Applies its own dark theme (see 6.1 note) and lays out a CSS grid: a
+  72px-tall top row split between ChatBrandBar (left) and ChatStatusBar
+  (right), and a body row split between a collapsible 320px Sidebar and the
+  active conversation.
+
+  Key behaviors:
+    - handleNewChat / handleDeleteChat — pure local list mutations.
+    - handleSendMessage(content, files?) — optimistically appends the user
+      message AND a placeholder assistant message with id prefixed
+      "loading-" and content "...", then calls fetchAnswer, then replaces
+      the placeholder with either the real answer or a generic error
+      message.
+    - fetchAnswer(question) — POST /query with Authorization: Bearer
+      <localStorage token>, measures round-trip time into durationMs, and
+      maps the response into a Message.
+    - handleRegenerate(question) — re-runs the last question, replacing only
+      the final message in the active chat.
+    - sourcesCited — a derived count of DISTINCT source names cited across
+      all messages in the active chat, shown in the conversation header.
+
+  >> Files attached via ChatInput are read into base64 client-side
+  >> (FileAttachment.data) purely for display as chips — they are NEVER
+  >> SENT TO ANY BACKEND ENDPOINT. Attaching a file in chat has no effect on
+  >> retrieval; only the Upload page's Dropzone actually ingests files.
+
+ChatBrandBar.tsx / ChatStatusBar.tsx
+  Replacements for the deleted Navbar.tsx. ChatBrandBar is the static logo +
+  "RAG" badge occupying the sidebar header row. ChatStatusBar is the wider
+  top bar: a sidebar-collapse toggle, a time-of-day greeting ("Good
+  morning/afternoon/evening", "Burning the midnight oil" before 5am) that
+  re-renders every 30 seconds, a fire-and-forget
+  fetch("https://ipapi.co/json/") call to derive the visitor's city for
+  display (failures are silently swallowed), two static status pills
+  (vector_index . synced, gpt-4.1-mini), and a link to /upload.
+
+  NOTE: The ipapi.co call is a third-party network request made directly
+  from the browser on every chat page load — purely cosmetic (shows the
+  user's city), not used for any application logic, and not authenticated
+  or rate-limited by this app.
+
+Sidebar.tsx
+  Renders the chat list grouped into Today / Yesterday / Last 7 days / Older
+  buckets (computed from each chat's updatedAt), with a search box
+  (Ctrl/Cmd+K focuses it via a global keydown listener) that filters by
+  title substring, and per-chat delete buttons that appear on hover.
+
+MessageList.tsx / MessageBubble.tsx
+  MessageList auto-scrolls to the bottom on every message change via a
+  sentinel <div ref={endRef}> and only wires a regenerate callback onto the
+  LAST message when it's from the assistant and not currently the loading
+  placeholder. MessageBubble renders user bubbles right-aligned and
+  assistant bubbles left-aligned; for assistant messages it shows numbered
+  source chips ([1] filename.pdf), a typing-bar animation while content ===
+  "...", the elapsed time formatted as ms or seconds, and copy / regenerate
+  / thumbs-up / thumbs-down icon buttons (feedback buttons are purely local
+  UI state — not sent anywhere).
+
+ChatInput.tsx
+  Multiline textarea (Enter to send, Shift+Enter for newline), a hidden file
+  <input> triggered by an "attach" button (purely cosmetic per the note
+  above), a static "top-k 5" indicator pill (not actually configurable — the
+  backend always retrieves 5), and a row of clickable suggested-prompt chips
+  that populate the input.
+
+--- 6.4 Upload module — frontend/src/pages/Upload/ ---
+
+types.ts
+  LibraryDocument { source, chunks, sizeBytes, indexedAt } (note: indexedAt
+  is typed as string here, since it arrives over JSON as an ISO date string
+  — contrast with the backend's LibraryDocument in services/library.ts where
+  it's a Date) and LibraryResponse { documents, totalDocuments,
+  totalChunks }, mirroring the /library response shape.
+
+UploadPage.tsx
+  Owns the page-level data fetch: on mount (and whenever refreshKey changes)
+  it calls GET /library with the bearer token and stores documents,
+  totalDocuments, totalChunks, loading, and error in state, guarding against
+  stale updates with a cancelled flag. Applies its own dark theme (matching
+  ChatPage's), renders UploadTopBar, a page heading, the Dropzone, and the
+  LibraryTable. Dropzone is given an onUploaded callback that simply
+  increments refreshKey to trigger a re-fetch of the library after a
+  successful upload.
+
+UploadTopBar.tsx
+  Static top bar: logo, a breadcrumb (chat / uploads, with "chat" linking
+  back to /chat), an "indexer . idle" status pill, and a live counter pill
+  showing {totalDocuments} docs . {formatVectorCount(totalChunks)} vectors
+  (vectors here means chunk count, with K/M abbreviation for large numbers).
+
+Dropzone.tsx
+  A drag-and-drop + click-to-browse file picker. Maintains a local
+  selectedFiles: File[] queue (files can be removed individually before
+  submitting); advertises accepted types .pdf .docx .txt .md .html .csv and
+  a 10MB/10-file limit as a label only — it performs NO CLIENT-SIDE
+  VALIDATION of type or size before upload, deferring entirely to the
+  backend's checks. On "index N file(s)" click:
+
+    POST http://localhost:3000/upload  (multipart/form-data, each file
+    appended under field "files")
+    Authorization: Bearer <token>
+    -> success: shows "Indexed N file(s)", clears the queue, calls onUploaded()
+    -> failure: shows the error message inline
+
+  >> As noted in section 5 (routes/upload.ts), .docx is advertised here as
+  >> accepted but is not actually handled by the backend's text-extraction
+  >> logic — uploading a real .docx will surface as an "Unsupported file
+  >> type" error from the server.
+
+LibraryTable.tsx
+  Purely presentational over the documents prop passed down from
+  UploadPage: client-side substring search by source, fixed page size of 8
+  with numbered pagination, and a row per document showing a derived
+  file-type badge (extension, uppercased, from the source filename), chunk
+  count, formatted size (Bytes/KB/MB/GB), and a short "indexed" date. The
+  "filter v" / "recent v" controls in the toolbar are static decoration —
+  they render but have no click handlers.
+
+
+================================================================================
+7. END-TO-END DATA FLOWS
+================================================================================
+
+--- 7.1 Login ---
+  1. User submits email/password in LoginForm.
+  2. POST /login -> routes/auth.ts queries USER_COLLECTION_NAME for an exact
+     {email, password} match.
+  3. On match, a 1-hour JWT {userId, email} is signed and returned.
+  4. Frontend stores the token in localStorage and navigates to /chat.
+  5. Every subsequent protected request reads the token back out of
+     localStorage and sends it as Authorization: Bearer <token>.
+
+--- 7.2 Document ingestion (Upload -> Library) ---
+  1. User drags/selects files in Dropzone; clicks "index N file(s)".
+  2. POST /upload (multipart) hits routes/upload.ts, guarded by
+     authMiddleware.
+  3. For each file, text is extracted (PDF via pdf-parse, or UTF-8 decode
+     for text-like types); unsupported types throw per-file.
+  4. ingestDocument() splits the text into ~1000-char chunks (200-char
+     overlap), embeds each chunk with text-embedding-3-small, and inserts
+     one Mongo document per chunk into COLLECTION_NAME.
+  5. The route responds with per-file chunk counts; the Dropzone shows a
+     success message and calls onUploaded().
+  6. UploadPage re-fetches GET /library, which re-aggregates all chunks
+     grouped by source, and the new document appears in LibraryTable.
+
+--- 7.3 Question answering (RAG) ---
+  1. User types a question in ChatInput and sends it; ChatPage
+     optimistically shows the question plus a "..." loading bubble.
+  2. POST /query {question} hits routes/query.ts, guarded by authMiddleware.
+  3. askQuestion() embeds the question, runs $vectorSearch against
+     COLLECTION_NAME's vector_index for the top 5 nearest chunks.
+  4. Retrieved chunk contents are concatenated into a context block and sent
+     to gpt-4.1-mini with a "use only this context" instruction.
+  5. The LLM's answer plus the list of cited source filenames is returned to
+     the frontend.
+  6. ChatPage replaces the loading bubble with the real answer, showing
+     source chips and response latency.
+
+--- 7.4 Library listing ---
+  1. UploadPage mounts (or an upload just completed) -> GET /library,
+     guarded by authMiddleware.
+  2. listLibraryDocuments() groups every chunk in COLLECTION_NAME by source,
+     computing chunk count, size, and most-recent createdAt per group.
+  3. Rows are sorted newest-first and returned with overall totals;
+     LibraryTable renders them with local search/pagination.
+
+
+================================================================================
+8. ENVIRONMENT VARIABLES & CONFIGURATION
+================================================================================
+
+The backend reads configuration exclusively from backend/.env (loaded via
+dotenv in server.ts). No .env.example is checked into the repo. Required
+keys:
+
+  Variable               Used by                              Purpose
+  ----------------------  ------------------------------------  --------------------------------------------------
+  MONGODB_URI             db/mongo.ts                           MongoDB Atlas connection string
+  DB_NAME                 db/mongo.ts                           Database name to select on the cluster
+  COLLECTION_NAME         ingest.ts, rag.ts, library.ts          Collection storing chunk documents (content +
+                                                                  embedding + source + sizeBytes + createdAt);
+                                                                  must have an Atlas Vector Search index named
+                                                                  vector_index over the embedding field
+  USER_COLLECTION_NAME    routes/auth.ts                         Collection storing {email, password} user
+                                                                  records (plaintext)
+  JWT_SECRET              middleware/auth.ts, routes/auth.ts     Symmetric secret used to sign/verify JWTs
+  OPENAI_API_KEY          utils/embeddings.ts, services/rag.ts   OpenAI API key for embeddings + chat completion
+  PORT                    server.ts                              Optional, defaults to 3000
+
+The frontend has no environment-variable configuration at all — the API base
+URL (http://localhost:3000) is hardcoded as a literal in every file that
+calls the API: LoginForm.tsx, ChatPage.tsx, UploadPage.tsx, and Dropzone.tsx.
+
+
+================================================================================
+9. RUNNING THE PROJECT
+================================================================================
+
+--- Local development (without Docker) ---
+
+  # Backend — from backend/
+  npm install
+  npm run dev          # tsx watch src/server.ts, auto-restarts on change,
+                        # http://localhost:3000
+
+  # Frontend — from frontend/
+  npm install
+  npm run dev          # Vite dev server, http://localhost:5173
+
+--- Type checking ---
+
+  cd backend && npm run typecheck     # tsc --noEmit
+  cd frontend && npm run typecheck    # tsc -b --pretty false
+
+Neither project has a working test script (backend's is a placeholder that
+exits with an error) or a lint script/config.
+
+--- Docker Compose (both services together) ---
+
+  docker-compose up   # from the repo root
+
+This builds and runs frontend (port 5173) and backend (port 3000, env loaded
+from backend/.env) as separate containers. Both bind-mount their source
+directory into the container and exclude node_modules via an anonymous
+volume, so local edits are reflected live. Because bind-mounted volumes on
+Windows don't always emit native filesystem change events, file watching is
+forced to polling mode: WATCHPACK_POLLING / CHOKIDAR_USEPOLLING for the
+backend container, and usePolling: true under server.watch in
+vite.config.ts for the frontend.
+
+
+================================================================================
+10. KNOWN LIMITATIONS, GAPS & SECURITY NOTES
+================================================================================
+
+  Area                          Note
+  -----------------------------  --------------------------------------------------------------
+  Password storage               Plaintext, exact-match lookup in routes/auth.ts — no hashing
+                                  algorithm is used anywhere.
+  Client-side route guard        isTokenValid() only decodes and reads the JWT's exp claim; it
+                                  never verifies the signature. The real enforcement happens
+                                  server-side in authMiddleware.
+  API base URL                   Hardcoded as http://localhost:3000 in five separate frontend
+                                  files — no shared config/client module, no env-based override
+                                  for non-local deployments.
+  Chat persistence                All chats/messages live only in React state in ChatPage —
+                                  refreshing the page loses everything; there is no backend
+                                  chat-storage API.
+  Chat attachments                Files attached via ChatInput are read as base64 for display
+                                  only and are never transmitted to the backend or used in
+                                  retrieval.
+  DOCX support gap                The Dropzone advertises .docx as an accepted type, but
+                                  routes/upload.ts has no DOCX text-extraction branch — such
+                                  uploads fail server-side.
+  Theming inconsistency           A global light theme is defined in theme/theme.ts but is only
+                                  actually visible on /login; ChatPage and UploadPage each
+                                  define and apply their own local dark theme, ignoring the
+                                  global one.
+  Third-party call on every       ChatStatusBar fires an unauthenticated request to
+  chat load                       https://ipapi.co/json/ purely to show the visitor's city — a
+                                  minor privacy/network-dependency consideration.
+  No retrieval relevance          askQuestion() always returns the top 5 nearest chunks and
+  threshold                       cites them as sources, even when none are semantically
+                                  relevant to the question.
+  Sequential embedding calls      ingestDocument() embeds chunks one at a time in a loop rather
+                                  than batching — large documents will be slower to ingest than
+                                  necessary.
+  Unused dependency                mongoose is listed in backend/package.json but nothing in
+                                  src/ imports it; all Mongo access goes through the native
+                                  driver in db/mongo.ts.
+  No automated tests               Backend's npm test is a placeholder that always fails; the
+                                  frontend has no test script at all.
+
+
+================================================================================
+11. FULL SOURCE FILE INDEX
+================================================================================
+
+--- Backend (backend/src/) ---
+  server.ts              — Express app entry point, route mounting, startup sequencing
+  db/mongo.ts             — connectDB() / getDB() singleton
+  middleware/auth.ts      — JWT bearer-token verification middleware
+  routes/auth.ts          — POST /login
+  routes/upload.ts        — POST /upload
+  routes/query.ts         — POST /query
+  routes/library.ts       — GET /library
+  services/ingest.ts      — chunk, embed, persist documents
+  services/rag.ts         — vector search + LLM answer generation
+  services/library.ts     — aggregate chunk collection into per-document rows
+  utils/embeddings.ts     — shared OpenAIEmbeddings instance
+
+--- Frontend (frontend/src/) ---
+  main.tsx                       — React root, global theme + router bootstrap
+  App.tsx                        — route table + ProtectedRoute
+  utils.ts                       — isTokenValid()
+  theme/theme.ts                 — global light MUI theme (effectively login-only)
+  pages/LoginPage.tsx            — login page shell/branding
+  components/login/LoginForm.tsx — login form logic + validation
+  pages/Chat/types.ts            — chat domain types
+  pages/Chat/ChatPage.tsx        — chat state, layout, API calls
+  pages/Chat/ChatBrandBar.tsx    — sidebar header / logo bar
+  pages/Chat/ChatStatusBar.tsx   — top status bar, greeting, geo lookup
+  pages/Chat/Sidebar.tsx         — grouped/searchable chat list
+  pages/Chat/MessageList.tsx     — message scroll container
+  pages/Chat/MessageBubble.tsx   — single message rendering + actions
+  pages/Chat/ChatInput.tsx       — composer, attachments (display-only), suggested prompts
+  pages/Upload/types.ts          — library domain types
+  pages/Upload/UploadPage.tsx    — library data fetch + page layout
+  pages/Upload/UploadTopBar.tsx  — breadcrumb + status pills
+  pages/Upload/Dropzone.tsx      — drag/drop file picker + upload submission
+  pages/Upload/LibraryTable.tsx  — searchable/paginated document table
+
+--- Project-level ---
+  docker-compose.yml         — local dev orchestration for both services
+  backend/.env                — required secrets/config (not checked in)
+  frontend/vite.config.ts     — Vite dev server + polling configuration
+
+================================================================================
+END OF DOCUMENT
+================================================================================

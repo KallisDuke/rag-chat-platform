@@ -5,12 +5,18 @@ export interface FileAttachment {
   data?: string; // base64 for preview
 }
 
+export interface SourceRef {
+  source: string;
+}
+
 export interface Message {
   id: string;
   content: string;
   role: "user" | "assistant";
   timestamp: Date;
   files?: FileAttachment[];
+  sources?: SourceRef[];
+  durationMs?: number;
 }
 
 export interface Chat {
