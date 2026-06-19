@@ -5,6 +5,7 @@ import { UploadTopBar } from "./UploadTopBar";
 import { Dropzone } from "./Dropzone";
 import { LibraryTable } from "./LibraryTable";
 import { LibraryDocument, LibraryResponse } from "./types";
+import { API_BASE_URL } from "../../config";
 
 const darkTheme = createTheme({
   palette: {
@@ -18,7 +19,7 @@ const darkTheme = createTheme({
   },
 });
 
-const API_BASE = "http://localhost:3000";
+const API_BASE = API_BASE_URL;
 
 export const UploadPage: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);

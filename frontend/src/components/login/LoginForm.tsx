@@ -12,6 +12,7 @@ import {
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { API_BASE_URL } from "../../config";
 
 type FormErrors = {
   email?: string;
@@ -50,7 +51,7 @@ export default function LoginForm() {
       setError(null);
 
       try {
-        const response = await fetch("http://localhost:3000/login", {
+        const response = await fetch(`${API_BASE_URL}/login`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
