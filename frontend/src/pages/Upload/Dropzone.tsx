@@ -1,9 +1,10 @@
 import React, { useRef, useState } from "react";
 import { Box, Chip, CircularProgress, Typography } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { API_BASE_URL } from "../../config";
 
 const ACCEPTED_LABELS = [".pdf", ".docx", ".txt", ".md", ".html", ".csv"];
-const API_BASE = "http://localhost:3000";
+const API_BASE = API_BASE_URL;
 
 const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 KB";

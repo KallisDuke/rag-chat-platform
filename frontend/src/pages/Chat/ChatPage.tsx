@@ -7,6 +7,7 @@ import { Sidebar } from "./Sidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { Chat, FileAttachment, Message, SourceRef } from "./types";
+import { API_BASE_URL } from "../../config";
 
 const darkTheme = createTheme({
   palette: {
@@ -20,7 +21,7 @@ const darkTheme = createTheme({
   },
 });
 
-const API_BASE = "http://localhost:3000";
+const API_BASE = API_BASE_URL;
 
 interface QueryResult {
   answer: string;
