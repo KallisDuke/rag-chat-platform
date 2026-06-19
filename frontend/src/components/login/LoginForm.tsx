@@ -5,13 +5,13 @@ import {
   Box,
   Button,
   InputAdornment,
-  Link,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 
 type FormErrors = {
   email?: string;
@@ -25,7 +25,6 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +44,6 @@ export default function LoginForm() {
     }
 
     setErrors(nextErrors);
-    setSubmitted(Object.keys(nextErrors).length === 0);
 
     if (Object.keys(nextErrors).length === 0) {
       setLoading(true);
@@ -66,8 +64,6 @@ export default function LoginForm() {
 
         const data: { token: string } = await response.json();
         localStorage.setItem("token", data.token);
-        setSubmitted(true);
-        setLoading(false);
         navigate("/chat");
       } catch (err) {
         const errorMessage =
@@ -83,147 +79,197 @@ export default function LoginForm() {
       component="form"
       noValidate
       onSubmit={handleSubmit}
-      sx={{ width: "100%" }}
+      sx={{ width: "100%", fontFamily: "inherit" }}
     >
-      <Stack spacing={{ xs: 2.25, sm: 2.75 }}>
-        <Box>
-          <Typography
-            component="h1"
-            sx={{
-              fontSize: { xs: 34, sm: 40 },
-              fontWeight: 800,
-              lineHeight: 1.15,
-            }}
-          >
-            Hello Kallis!
-          </Typography>
-          <Typography
-            color="text.primary"
-            sx={{ mt: 3.5, fontSize: { xs: 20, sm: 25 }, fontWeight: 400 }}
-          >
-            Get Started
-          </Typography>
-        </Box>
+      <Typography
+        sx={{
+          fontFamily: "inherit",
+          fontSize: 13,
+          letterSpacing: "2px",
+          textTransform: "uppercase",
+          color: "#8a8d84",
+          mb: 3,
+        }}
+      >
+        ◐ Sign in
+      </Typography>
 
-        {submitted && !error && (
-          <Alert severity="success" onClose={() => setSubmitted(false)}>
-            Your login details are valid.
-          </Alert>
-        )}
+      <Typography
+        component="h2"
+        sx={{
+          fontFamily: "inherit",
+          fontWeight: 400,
+          fontSize: 56,
+          lineHeight: 1.05,
+          letterSpacing: "-1px",
+          color: "#0e1411",
+          m: 0,
+          mb: 2,
+        }}
+      >
+        Welcome back.
+      </Typography>
+      <Typography
+        sx={{
+          fontFamily: "inherit",
+          fontSize: 17,
+          color: "#6a6e66",
+          lineHeight: 1.5,
+          mb: 6,
+        }}
+      >
+        Enter your credentials to access your workspace and continue your
+        conversations.
+      </Typography>
 
+      <Stack spacing={2.75}>
         {error && (
           <Alert severity="error" onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
 
-        <TextField
-          fullWidth
-          error={Boolean(errors.email)}
-          helperText={errors.email}
-          id="email"
-          name="email"
-          placeholder="Email Address"
-          type="email"
-          value={email}
-          onChange={(event) => {
-            setEmail(event.target.value);
-            setSubmitted(false);
-            if (errors.email)
-              setErrors((current) => ({ ...current, email: undefined }));
-          }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <EmailOutlinedIcon />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={fieldStyles}
-        />
+        <Box>
+          <Typography
+            component="label"
+            htmlFor="email"
+            sx={{
+              display: "block",
+              fontFamily: "inherit",
+              fontSize: 14,
+              fontWeight: 500,
+              color: "#3a3e37",
+              mb: 1,
+              letterSpacing: "0.1px",
+            }}
+          >
+            Email
+          </Typography>
+          <TextField
+            fullWidth
+            error={Boolean(errors.email)}
+            helperText={errors.email}
+            id="email"
+            name="email"
+            placeholder="you@company.com"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (errors.email)
+                setErrors((current) => ({ ...current, email: undefined }));
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <EmailOutlinedIcon sx={{ fontSize: 20, color: "#8a8d84" }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+            sx={fieldStyles}
+          />
+        </Box>
 
-        <TextField
-          fullWidth
-          error={Boolean(errors.password)}
-          helperText={errors.password}
-          id="password"
-          name="password"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(event) => {
-            setPassword(event.target.value);
-            setSubmitted(false);
-            if (errors.password) {
-              setErrors((current) => ({ ...current, password: undefined }));
-            }
-          }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <LockOutlinedIcon />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={fieldStyles}
-        />
+        <Box>
+          <Typography
+            component="label"
+            htmlFor="password"
+            sx={{
+              display: "block",
+              fontFamily: "inherit",
+              fontSize: 14,
+              fontWeight: 500,
+              color: "#3a3e37",
+              mb: 1,
+              letterSpacing: "0.1px",
+            }}
+          >
+            Password
+          </Typography>
+          <TextField
+            fullWidth
+            error={Boolean(errors.password)}
+            helperText={errors.password}
+            id="password"
+            name="password"
+            placeholder="••••••••••••"
+            type="password"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              if (errors.password) {
+                setErrors((current) => ({ ...current, password: undefined }));
+              }
+            }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <LockOutlinedIcon sx={{ fontSize: 20, color: "#8a8d84" }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+            sx={fieldStyles}
+          />
+        </Box>
 
         <Button
           fullWidth
-          size="large"
           type="submit"
           variant="contained"
           disabled={loading}
+          endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
           sx={{
-            minHeight: 70,
-            borderRadius: 999,
+            mt: 1,
+            height: 64,
+            borderRadius: "8px",
+            bgcolor: "#0e1411",
+            color: "#f5f1e8",
+            fontFamily: "inherit",
+            fontSize: 17,
+            fontWeight: 500,
+            letterSpacing: "0.2px",
+            textTransform: "none",
             boxShadow: "none",
-            fontSize: 18,
-            "&:hover": { boxShadow: "none" },
+            "&:hover": { bgcolor: "#1a221d", boxShadow: "none" },
           }}
         >
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Signing in..." : "Sign in to workspace"}
         </Button>
-
-        <Link
-          component="button"
-          type="button"
-          underline="hover"
-          color="text.secondary"
-          sx={{ alignSelf: "flex-start", fontSize: 17 }}
-          onClick={() => setSubmitted(false)}
-        >
-          Forgot Password
-        </Link>
       </Stack>
     </Box>
   );
 }
 
 const fieldStyles = {
+  fontFamily: "inherit",
   "& .MuiOutlinedInput-root": {
-    minHeight: 70,
-    borderRadius: 999,
-    px: 1.5,
-    fontSize: 18,
-    color: "text.primary",
+    height: 60,
+    borderRadius: "8px",
+    bgcolor: "#ffffff",
+    fontFamily: "inherit",
+    fontSize: 16,
+    color: "#0e1411",
     "& fieldset": {
-      borderColor: "#c6c6c6",
+      borderColor: "#d8d3c6",
     },
     "&:hover fieldset": {
-      borderColor: "#9e9e9e",
+      borderColor: "#d8d3c6",
+    },
+    "&.Mui-focused fieldset": {
+      borderColor: "#0e1411",
+      borderWidth: "1px",
+      boxShadow: "0 0 0 3px rgba(14, 20, 17, 0.08)",
     },
   },
   "& .MuiInputAdornment-root": {
-    color: "#a9a9a9",
     mr: 1,
   },
   "& input::placeholder": {
-    color: "#a9a9a9",
+    color: "#8a8d84",
     opacity: 1,
   },
 } as const;

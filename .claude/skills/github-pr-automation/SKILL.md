@@ -105,8 +105,14 @@ before opening a PR.
   (repeat per changed file, or group trivial ones, e.g. lockfile bumps)
 ```
 
-Use the PR title = the commit subject (or a short summary if the push included
-multiple commits).
+Format the PR title as `<Type>: <commit subject>`, where `<Type>` is one of
+`Feature`, `Bug`, or `Chore`, chosen from the diff's intent:
+- `Feature` — new functionality or user-facing capability
+- `Bug` — a fix for incorrect behavior
+- `Chore` — tooling, config, deps, refactors, docs, or other non-functional changes
+
+Use the commit subject (or a short summary if the push included multiple commits)
+as the `<commit name>` portion, e.g. `Feature: add file upload page`.
 
 **Create the PR** with the discovered MCP tool, passing: head = current branch,
 base = the branch confirmed with the user, title, and the generated body.

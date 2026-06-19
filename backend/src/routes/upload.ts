@@ -107,7 +107,11 @@ router.post(
 
       if (text) {
         const source = body.source?.trim() || "submitted-text.txt";
-        const chunks = await ingestDocument(text, source);
+        const chunks = await ingestDocument(
+          text,
+          source,
+          Buffer.byteLength(text, "utf8"),
+        );
         documents.push({ source, chunks });
       }
 
@@ -118,7 +122,11 @@ router.post(
           throw new Error(`No readable text found in "${file.originalname}".`);
         }
 
-        const chunks = await ingestDocument(fileText, file.originalname);
+        const chunks = await ingestDocument(
+          fileText,
+          file.originalname,
+          file.size,
+        );
         documents.push({ source: file.originalname, chunks });
       }
 

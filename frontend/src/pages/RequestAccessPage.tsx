@@ -1,7 +1,8 @@
 import { Link as RouterLink } from "react-router-dom";
 import { keyframes } from "@emotion/react";
 import { Box, Typography } from "@mui/material";
-import LoginForm from "../components/login/LoginForm";
+import CheckIcon from "@mui/icons-material/Check";
+import RequestAccessForm from "../components/requestAccess/RequestAccessForm";
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -17,7 +18,11 @@ const stats = [
   { value: "240", unit: "ms", label: "Median p50" },
 ];
 
-export default function LoginPage() {
+const avatarInitials = ["A", "M", "R"];
+
+const perks = ["No credit card", "Free tier included"];
+
+export default function RequestAccessPage() {
   return (
     <Box
       component="main"
@@ -142,12 +147,12 @@ export default function LoginPage() {
               sx={{
                 width: 6,
                 height: 6,
-                bgcolor: "#6fbf73",
+                bgcolor: "#c8a96a",
                 borderRadius: "50%",
                 animation: `${pulse} 2.4s ease-in-out infinite`,
               }}
             />
-            Retrieval engine online
+            Early access
           </Box>
           <Typography
             component="h1"
@@ -161,10 +166,10 @@ export default function LoginPage() {
               color: "#f5f1e8",
             }}
           >
-            Your knowledge,
+            Join the
             <br />
             <Box component="span" sx={{ fontStyle: "italic", color: "#c8a96a" }}>
-              answered.
+              waitlist.
             </Box>
           </Typography>
           <Typography
@@ -176,10 +181,70 @@ export default function LoginPage() {
               maxWidth: 440,
             }}
           >
-            Index documents, query across millions of vectors, and ground
-            every response in your source material. Built for teams that
-            demand citations, not hallucinations.
+            Kallis is currently available to select teams. Request access and we&apos;ll reach out
+            when a spot opens up — usually within 48 hours.
           </Typography>
+
+          {/* Social proof */}
+          <Box sx={{ mt: 5, display: "flex", flexDirection: "column", gap: 2.5 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box sx={{ display: "flex" }}>
+                {avatarInitials.map((initial, index) => (
+                  <Box
+                    key={initial}
+                    sx={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      bgcolor: "#2a302c",
+                      border: "2px solid #0e1411",
+                      ml: index === 0 ? 0 : "-8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      color: "#c8a96a",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {initial}
+                  </Box>
+                ))}
+                <Box
+                  sx={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    bgcolor: "#1f2521",
+                    border: "2px solid #0e1411",
+                    ml: "-8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    color: "#8a9088",
+                  }}
+                >
+                  +
+                </Box>
+              </Box>
+              <Box sx={{ fontSize: 12, color: "#8a9088", lineHeight: 1.4 }}>
+                <Box component="span" sx={{ color: "#ece8df" }}>
+                  340+ teams
+                </Box>{" "}
+                on the waitlist
+              </Box>
+            </Box>
+
+            <Box sx={{ display: "flex", gap: 4 }}>
+              {perks.map((perk) => (
+                <Box key={perk} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <CheckIcon sx={{ fontSize: 14, color: "#6fbf73" }} />
+                  <Box sx={{ fontSize: 11, color: "#b8bdb5" }}>{perk}</Box>
+                </Box>
+              ))}
+            </Box>
+          </Box>
         </Box>
 
         {/* Footer stats */}
@@ -239,10 +304,10 @@ export default function LoginPage() {
             color: "#5a5e57",
           }}
         >
-          <Box component="span">New to Kallis?</Box>
+          <Box component="span">Already have access?</Box>
           <Box
             component={RouterLink}
-            to="/request-access"
+            to="/login"
             sx={{
               color: "#0e1411",
               textDecoration: "none",
@@ -254,13 +319,13 @@ export default function LoginPage() {
               "&:hover": { bgcolor: "#efebe0" },
             }}
           >
-            Request access →
+            ← Sign in
           </Box>
         </Box>
 
         {/* Form */}
-        <Box sx={{ m: "auto", width: "100%", maxWidth: 520, py: 5 }}>
-          <LoginForm />
+        <Box sx={{ m: "auto", width: "100%", maxWidth: 560, py: 5 }}>
+          <RequestAccessForm />
         </Box>
 
         {/* Footer */}
