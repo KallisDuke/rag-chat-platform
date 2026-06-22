@@ -1,13 +1,12 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { connectDB } from "./db/mongo.ts";
 import uploadRouter from "./routes/upload.ts";
 import queryRouter from "./routes/query.ts";
 import loginRouter from "./routes/auth.ts";
 import libraryRouter from "./routes/library.ts";
-
-dotenv.config();
+import accessRequestsRouter from "./routes/accessRequests.ts";
 
 const app = express();
 const port = process.env.PORT ?? "3000";
@@ -19,6 +18,7 @@ app.use("/upload", uploadRouter);
 app.use("/query", queryRouter);
 app.use("/login", loginRouter);
 app.use("/library", libraryRouter);
+app.use("/access-requests", accessRequestsRouter);
 
 app.get("/health", (req, res) => {
   res.json({ message: "Health check passed", status: "OK" });

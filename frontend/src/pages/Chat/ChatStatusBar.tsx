@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Box, IconButton, Stack, Typography, keyframes } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import { isAdmin } from "../../utils";
 
 const USER_NAME = "Kallis";
 
@@ -120,6 +122,31 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
       </Stack>
 
       <Box sx={{ flex: 1 }} />
+
+      {isAdmin() && (
+        <Box
+          component={Link}
+          to="/admin"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            height: 40,
+            px: 1.75,
+            border: "1px solid #1f2521",
+            borderRadius: "5px",
+            color: "#8a9088",
+            fontSize: 14,
+            letterSpacing: "0.3px",
+            textDecoration: "none",
+            flex: "none",
+            "&:hover": { borderColor: "#c8a96a", color: "#c8a96a" },
+          }}
+        >
+          <ShieldOutlinedIcon sx={{ fontSize: 18 }} />
+          Admin
+        </Box>
+      )}
 
       <Stack direction="row" spacing={1.25} alignItems="center">
         <Box sx={pillSx}>

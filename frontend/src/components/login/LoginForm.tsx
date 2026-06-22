@@ -63,8 +63,11 @@ export default function LoginForm() {
           throw new Error("Invalid email or password");
         }
 
-        const data: { token: string } = await response.json();
+        const data: { token: string; role?: string; email?: string } =
+          await response.json();
         localStorage.setItem("token", data.token);
+        if (data.role) localStorage.setItem("role", data.role);
+        if (data.email) localStorage.setItem("email", data.email);
         navigate("/chat");
       } catch (err) {
         const errorMessage =

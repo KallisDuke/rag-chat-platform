@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import {
+  Alert,
   Box,
   Button,
   InputAdornment,
@@ -10,6 +11,7 @@ import {
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { API_BASE_URL } from "../../config";
 
 type FormErrors = {
   fullName?: string;
@@ -24,8 +26,10 @@ export default function RequestAccessForm() {
   const [useCase, setUseCase] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const nextErrors: FormErrors = {};
@@ -42,8 +46,36 @@ export default function RequestAccessForm() {
 
     setErrors(nextErrors);
 
-    if (Object.keys(nextErrors).length === 0) {
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    setLoading(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/access-requests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: email.trim(),
+          useCase: useCase.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message ?? "Could not submit your request");
+      }
+
       setSubmitted(true);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Could not submit your request",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,6 +158,12 @@ export default function RequestAccessForm() {
       </Typography>
 
       <Stack spacing={3}>
+        {submitError && (
+          <Alert severity="error" onClose={() => setSubmitError(null)}>
+            {submitError}
+          </Alert>
+        )}
+
         <Box>
           <Typography
             component="label"
@@ -249,6 +287,7 @@ export default function RequestAccessForm() {
           fullWidth
           type="submit"
           variant="contained"
+          disabled={loading}
           endIcon={<ArrowForwardIcon sx={{ fontSize: 18 }} />}
           sx={{
             mt: 0.5,
@@ -263,9 +302,10 @@ export default function RequestAccessForm() {
             textTransform: "none",
             boxShadow: "none",
             "&:hover": { bgcolor: "#1a221d", boxShadow: "none" },
+            "&.Mui-disabled": { bgcolor: "#0e1411", color: "#8a8d84" },
           }}
         >
-          Request access
+          {loading ? "Submitting…" : "Request access"}
         </Button>
 
         <Typography sx={{ fontFamily: "inherit", fontSize: 12, color: "#8a8d84", lineHeight: 1.55, textAlign: "center" }}>
