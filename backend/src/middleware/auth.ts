@@ -5,8 +5,12 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
+    role?: string;
   };
 }
+
+// The dashboard is restricted to this account specifically, on top of role.
+export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "kallisduke@gmail.com";
 
 export const authMiddleware = (
   req: AuthRequest,
@@ -33,6 +37,7 @@ export const authMiddleware = (
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as unknown as {
       userId: string;
       email: string;
+      role?: string;
     };
 
     req.user = decoded;
@@ -43,4 +48,16 @@ export const authMiddleware = (
       message: "Invalid token",
     });
   }
+};
+
+export const adminMiddleware = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+) => {
+  if (req.user?.role !== "admin" || req.user.email !== ADMIN_EMAIL) {
+    return res.status(403).json({ message: "Admin access required" });
+  }
+
+  next();
 };

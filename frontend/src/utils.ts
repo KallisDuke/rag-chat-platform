@@ -4,6 +4,8 @@ interface JwtPayload {
   exp: number;
 }
 
+export const ADMIN_EMAIL = "kallisduke@gmail.com";
+
 export const isTokenValid = () => {
   const token = localStorage.getItem("token");
 
@@ -16,4 +18,17 @@ export const isTokenValid = () => {
   } catch {
     return false;
   }
+};
+
+export const getRole = () => localStorage.getItem("role");
+
+export const getEmail = () => localStorage.getItem("email");
+
+export const isAdmin = () =>
+  isTokenValid() && getRole() === "admin" && getEmail() === ADMIN_EMAIL;
+
+export const logout = () => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("email");
 };

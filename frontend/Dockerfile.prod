@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+
+# Production image for the Vite/React SPA: build static assets, then serve them
+# with nginx (with SPA fallback so client-side routes resolve to index.html).
+
+# ---- build the static assets ----
+FROM node:22-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+# VITE_API_URL is inlined into the bundle at BUILD time (Vite cannot read it at
+# runtime). Override with the real backend URL:
+#   docker build -f Dockerfile.prod --build-arg VITE_API_URL=https://api.example.com .
+# If omitted, the build falls back to localhost — fine for local testing only.
+ARG VITE_API_URL=http://localhost:3000
+ENV VITE_API_URL=$VITE_API_URL
+RUN echo ">> Building frontend with VITE_API_URL=$VITE_API_URL"
+
+COPY . .
+RUN npm run build
+
+# ---- serve with nginx ----
+FROM nginx:1.27-alpine AS runtime
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

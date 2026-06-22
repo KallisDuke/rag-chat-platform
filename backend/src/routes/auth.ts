@@ -31,6 +31,7 @@ router.post("/", async (req, res) => {
       {
         userId: user._id.toString(),
         email: user.email,
+        role: user.role,
       },
       process.env.JWT_SECRET!,
       {
@@ -40,6 +41,8 @@ router.post("/", async (req, res) => {
 
     return res.json({
       token,
+      role: user.role,
+      email: user.email,
     });
   } catch (error: any) {
     return res.status(500).json({

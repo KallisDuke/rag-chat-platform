@@ -3,11 +3,17 @@ import LoginPage from "./pages/LoginPage";
 import RequestAccessPage from "./pages/RequestAccessPage";
 import ChatPage from "./pages/Chat/ChatPage";
 import { UploadPage } from "./pages/Upload/UploadPage";
-import { isTokenValid } from "./utils";
+import { AdminDashboard } from "./pages/Admin/AdminDashboard";
+import { isTokenValid, isAdmin } from "./utils";
 
 function ProtectedRoute({ element }: { element: React.ReactNode }) {
   const token = isTokenValid();
   return token ? element : <Navigate to="/login" replace />;
+}
+
+function AdminRoute({ element }: { element: React.ReactNode }) {
+  if (!isTokenValid()) return <Navigate to="/login" replace />;
+  return isAdmin() ? element : <Navigate to="/chat" replace />;
 }
 
 export default function App() {
@@ -20,6 +26,10 @@ export default function App() {
       <Route
         path="/upload"
         element={<ProtectedRoute element={<UploadPage />} />}
+      />
+      <Route
+        path="/admin"
+        element={<AdminRoute element={<AdminDashboard />} />}
       />
     </Routes>
   );

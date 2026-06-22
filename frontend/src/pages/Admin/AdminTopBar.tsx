@@ -1,7 +1,7 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Box, Stack, Typography, keyframes } from "@mui/material";
-import { isAdmin } from "../../utils";
+import { logout } from "../../utils";
 
 const pulseDot = keyframes`
   0%, 100% { opacity: 1; }
@@ -33,21 +33,18 @@ const crumbSx = {
   "&:hover": { color: "#ece8df" },
 } as const;
 
-interface UploadTopBarProps {
-  totalDocuments: number;
-  totalChunks: number;
+interface AdminTopBarProps {
+  pendingCount: number;
 }
 
-const formatVectorCount = (count: number) => {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-  return count.toLocaleString();
-};
+export const AdminTopBar: React.FC<AdminTopBarProps> = ({ pendingCount }) => {
+  const navigate = useNavigate();
 
-export const UploadTopBar: React.FC<UploadTopBarProps> = ({
-  totalDocuments,
-  totalChunks,
-}) => {
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
   return (
     <Stack
       direction="row"
@@ -101,6 +98,12 @@ export const UploadTopBar: React.FC<UploadTopBarProps> = ({
         <Box component="span" sx={{ color: "#4a4f48", fontSize: 13 }}>
           /
         </Box>
+        <Box component={Link} to="/upload" sx={crumbSx}>
+          uploads
+        </Box>
+        <Box component="span" sx={{ color: "#4a4f48", fontSize: 13 }}>
+          /
+        </Box>
         <Box
           sx={{
             color: "#ece8df",
@@ -112,18 +115,8 @@ export const UploadTopBar: React.FC<UploadTopBarProps> = ({
             borderRadius: "4px",
           }}
         >
-          uploads
+          admin
         </Box>
-        {isAdmin() && (
-          <>
-            <Box component="span" sx={{ color: "#4a4f48", fontSize: 13 }}>
-              /
-            </Box>
-            <Box component={Link} to="/admin" sx={crumbSx}>
-              admin
-            </Box>
-          </>
-        )}
       </Stack>
 
       <Box sx={{ flex: 1 }} />
@@ -135,39 +128,37 @@ export const UploadTopBar: React.FC<UploadTopBarProps> = ({
             sx={{
               width: 6,
               height: 6,
-              backgroundColor: "#6fbf73",
+              backgroundColor: pendingCount > 0 ? "#c8a96a" : "#6fbf73",
               borderRadius: "50%",
               animation: `${pulseDot} 2.4s ease-in-out infinite`,
             }}
           />
-          <span>indexer · idle</span>
-        </Box>
-        <Box sx={pillSx}>
-          <Box component="span" sx={{ color: "#c8a96a" }}>
-            ⎈
-          </Box>
           <span>
-            {totalDocuments.toLocaleString()} docs · {formatVectorCount(totalChunks)} vectors
+            {pendingCount} pending request{pendingCount === 1 ? "" : "s"}
           </span>
         </Box>
       </Stack>
 
       <Box
+        component="button"
+        type="button"
+        onClick={handleLogout}
         sx={{
-          width: 36,
           height: 36,
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #c8a96a, #8a6e3e)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          px: 1.75,
+          backgroundColor: "transparent",
+          border: "1px solid #1f2521",
+          borderRadius: "5px",
+          color: "#8a9088",
+          fontFamily: "inherit",
           fontSize: 13,
-          fontWeight: 600,
-          color: "#0e1411",
+          letterSpacing: "0.3px",
+          cursor: "pointer",
           flex: "none",
+          "&:hover": { borderColor: "#2a302c", color: "#ece8df" },
         }}
       >
-        K
+        sign out
       </Box>
     </Stack>
   );
