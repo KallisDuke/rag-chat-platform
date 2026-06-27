@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { ChatBrandBar } from "./ChatBrandBar";
@@ -8,6 +8,13 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { Chat, FileAttachment, Message, SourceRef } from "./types";
 import { API_BASE_URL } from "../../config";
+import { getEmail } from "../../utils";
+import {
+  createConversation,
+  deleteConversation,
+  fetchConversations,
+  updateConversation,
+} from "./conversationsApi";
 
 const darkTheme = createTheme({
   palette: {
@@ -28,15 +35,36 @@ interface QueryResult {
   sources?: SourceRef[];
 }
 
+// Locally-created chats use this prefix until they are persisted and given a
+// real backend id. A chat is only saved once it has its first exchange.
+const isPersisted = (id: string) => !id.startsWith("local-");
+
 export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Load this user's saved conversations once on mount.
+  useEffect(() => {
+    const email = getEmail();
+    if (!email) return;
+
+    let cancelled = false;
+    fetchConversations(email)
+      .then((loaded) => {
+        if (!cancelled) setChats(loaded);
+      })
+      .catch((error) => console.error("Failed to load conversations:", error));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleNewChat = () => {
     const newChat: Chat = {
-      id: Date.now().toString(),
+      id: "local-" + Date.now().toString(),
       title: "New conversation",
       messages: [],
       createdAt: new Date(),
@@ -49,11 +77,55 @@ export default function ChatPage() {
   const handleDeleteChat = (chatId: string) => {
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
     setActiveChat((prev) => (prev?.id === chatId ? null : prev));
+
+    if (isPersisted(chatId)) {
+      deleteConversation(chatId).catch((error) =>
+        console.error("Failed to delete conversation:", error),
+      );
+    }
   };
 
   const applyToChat = (chatId: string, updater: (chat: Chat) => Chat) => {
     setChats((prev) => prev.map((c) => (c.id === chatId ? updater(c) : c)));
     setActiveChat((prev) => (prev?.id === chatId ? updater(prev) : prev));
+  };
+
+  // Swap a chat's temporary local id for the backend id after first save.
+  const reconcileChatId = (oldId: string, newId: string) => {
+    setChats((prev) =>
+      prev.map((c) => (c.id === oldId ? { ...c, id: newId } : c)),
+    );
+    setActiveChat((prev) =>
+      prev?.id === oldId ? { ...prev, id: newId } : prev,
+    );
+  };
+
+  // Create the conversation on first save, then update it on every change.
+  const persistChat = async (chat: {
+    id: string;
+    title: string;
+    messages: Message[];
+  }) => {
+    const email = getEmail();
+    if (!email) return;
+
+    try {
+      if (isPersisted(chat.id)) {
+        await updateConversation(chat.id, {
+          title: chat.title,
+          messages: chat.messages,
+        });
+      } else {
+        const saved = await createConversation({
+          email,
+          title: chat.title,
+          messages: chat.messages,
+        });
+        reconcileChatId(chat.id, saved.id);
+      }
+    } catch (error) {
+      console.error("Failed to persist conversation:", error);
+    }
   };
 
   const fetchAnswer = async (question: string): Promise<Message> => {
@@ -96,6 +168,9 @@ export default function ChatPage() {
   ) => {
     if (!activeChat) return;
     const chatId = activeChat.id;
+    const baseMessages = activeChat.messages;
+    const title =
+      baseMessages.length === 0 ? content.slice(0, 48) : activeChat.title;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -113,30 +188,26 @@ export default function ChatPage() {
 
     applyToChat(chatId, (chat) => ({
       ...chat,
-      title: chat.messages.length === 0 ? content.slice(0, 48) : chat.title,
-      messages: [...chat.messages, userMessage, loadingMessage],
+      title,
+      messages: [...baseMessages, userMessage, loadingMessage],
       updatedAt: new Date(),
     }));
 
     setIsLoading(true);
     try {
       const assistantMessage = await fetchAnswer(content);
+      const finalMessages = [...baseMessages, userMessage, assistantMessage];
       applyToChat(chatId, (chat) => ({
         ...chat,
-        messages: [
-          ...chat.messages.filter((m) => !m.id.startsWith("loading-")),
-          assistantMessage,
-        ],
+        messages: finalMessages,
         updatedAt: new Date(),
       }));
+      await persistChat({ id: chatId, title, messages: finalMessages });
     } catch (error) {
       console.error("Error sending message:", error);
       applyToChat(chatId, (chat) => ({
         ...chat,
-        messages: [
-          ...chat.messages.filter((m) => !m.id.startsWith("loading-")),
-          errorMessage(),
-        ],
+        messages: [...baseMessages, userMessage, errorMessage()],
         updatedAt: new Date(),
       }));
     } finally {
@@ -147,6 +218,8 @@ export default function ChatPage() {
   const handleRegenerate = async (question: string) => {
     if (!activeChat) return;
     const chatId = activeChat.id;
+    const title = activeChat.title;
+    const baseMessages = activeChat.messages.slice(0, -1);
     const loadingMessage: Message = {
       id: "loading-" + Date.now().toString(),
       content: "...",
@@ -156,22 +229,24 @@ export default function ChatPage() {
 
     applyToChat(chatId, (chat) => ({
       ...chat,
-      messages: [...chat.messages.slice(0, -1), loadingMessage],
+      messages: [...baseMessages, loadingMessage],
     }));
 
     setIsLoading(true);
     try {
       const assistantMessage = await fetchAnswer(question);
+      const finalMessages = [...baseMessages, assistantMessage];
       applyToChat(chatId, (chat) => ({
         ...chat,
-        messages: [...chat.messages.slice(0, -1), assistantMessage],
+        messages: finalMessages,
         updatedAt: new Date(),
       }));
+      await persistChat({ id: chatId, title, messages: finalMessages });
     } catch (error) {
       console.error("Error regenerating message:", error);
       applyToChat(chatId, (chat) => ({
         ...chat,
-        messages: [...chat.messages.slice(0, -1), errorMessage()],
+        messages: [...baseMessages, errorMessage()],
       }));
     } finally {
       setIsLoading(false);
