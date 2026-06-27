@@ -7,6 +7,7 @@ import queryRouter from "./routes/query.ts";
 import loginRouter from "./routes/auth.ts";
 import libraryRouter from "./routes/library.ts";
 import accessRequestsRouter from "./routes/accessRequests.ts";
+import conversationsRouter from "./routes/conversations.ts";
 
 const app = express();
 const port = process.env.PORT ?? "3000";
@@ -19,6 +20,7 @@ app.use("/query", queryRouter);
 app.use("/login", loginRouter);
 app.use("/library", libraryRouter);
 app.use("/access-requests", accessRequestsRouter);
+app.use("/conversations", conversationsRouter);
 
 app.get("/health", (req, res) => {
   res.json({ message: "Health check passed", status: "OK" });
