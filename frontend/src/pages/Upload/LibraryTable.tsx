@@ -97,8 +97,8 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
           </Typography>
         </Box>
 
-        <Box sx={{ display: "flex", gap: 1.25 }}>
-          <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
+        <Box sx={{ display: "flex", gap: 1.25, flex: { xs: "1 1 100%", sm: "0 1 auto" } }}>
+          <Box sx={{ position: "relative", display: "flex", alignItems: "center", flex: { xs: 1, sm: "none" } }}>
             <SearchIcon sx={{ position: "absolute", left: 10, fontSize: 16, color: "#6f7670" }} />
             <InputBase
               value={search}
@@ -111,7 +111,7 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
                 height: 36,
                 pl: 4.25,
                 pr: 1.5,
-                width: 240,
+                width: { xs: "100%", sm: 240 },
                 backgroundColor: "#141a16",
                 border: "1px solid #1f2521",
                 borderRadius: "5px",
@@ -121,16 +121,17 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
               }}
             />
           </Box>
-          <Box sx={{ height: 36, px: 1.5, display: "flex", alignItems: "center", backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "5px", color: "#8a9088", fontSize: 13, letterSpacing: "0.3px" }}>
+          <Box sx={{ height: 36, px: 1.5, display: { xs: "none", sm: "flex" }, alignItems: "center", backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "5px", color: "#8a9088", fontSize: 13, letterSpacing: "0.3px" }}>
             filter ▾
           </Box>
-          <Box sx={{ height: 36, px: 1.5, display: "flex", alignItems: "center", backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "5px", color: "#8a9088", fontSize: 13, letterSpacing: "0.3px" }}>
+          <Box sx={{ height: 36, px: 1.5, display: { xs: "none", sm: "flex" }, alignItems: "center", backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "5px", color: "#8a9088", fontSize: 13, letterSpacing: "0.3px" }}>
             recent ▾
           </Box>
         </Box>
       </Box>
 
-      <Box sx={{ backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "9px", overflow: "hidden" }}>
+      <Box sx={{ overflowX: "auto" }}>
+      <Box sx={{ minWidth: 600, backgroundColor: "#141a16", border: "1px solid #1f2521", borderRadius: "9px", overflow: "hidden" }}>
         <Box
           sx={{
             display: "grid",
@@ -243,6 +244,7 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
               </Box>
             </Box>
           ))}
+      </Box>
       </Box>
 
       {!loading && !error && filtered.length > 0 && (

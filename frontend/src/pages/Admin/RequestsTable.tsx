@@ -72,7 +72,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
           </Typography>
         </Box>
 
-        <Box sx={{ position: "relative", display: "flex", alignItems: "center" }}>
+        <Box sx={{ position: "relative", display: "flex", alignItems: "center", flex: { xs: "1 1 100%", sm: "0 1 auto" } }}>
           <SearchIcon sx={{ position: "absolute", left: 10, fontSize: 16, color: "#6f7670" }} />
           <InputBase
             value={search}
@@ -82,7 +82,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
               height: 36,
               pl: 4.25,
               pr: 1.5,
-              width: 260,
+              width: { xs: "100%", sm: 260 },
               backgroundColor: "#141a16",
               border: "1px solid #1f2521",
               borderRadius: "5px",
@@ -94,8 +94,10 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
         </Box>
       </Box>
 
+      <Box sx={{ overflowX: "auto" }}>
       <Box
         sx={{
+          minWidth: 720,
           backgroundColor: "#141a16",
           border: "1px solid #1f2521",
           borderRadius: "9px",
@@ -279,6 +281,7 @@ export const RequestsTable: React.FC<RequestsTableProps> = ({
               </Box>
             );
           })}
+      </Box>
       </Box>
     </Box>
   );

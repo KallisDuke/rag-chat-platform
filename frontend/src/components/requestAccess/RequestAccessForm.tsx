@@ -99,7 +99,7 @@ export default function RequestAccessForm() {
           sx={{
             fontFamily: "inherit",
             fontWeight: 400,
-            fontSize: 48,
+            fontSize: { xs: 34, sm: 48 },
             lineHeight: 1.08,
             letterSpacing: "-1px",
             color: "#0e1411",
@@ -140,7 +140,7 @@ export default function RequestAccessForm() {
         sx={{
           fontFamily: "inherit",
           fontWeight: 400,
-          fontSize: 48,
+          fontSize: { xs: 34, sm: 48 },
           lineHeight: 1.08,
           letterSpacing: "-1px",
           color: "#0e1411",

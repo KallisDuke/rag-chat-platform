@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Box, CssBaseline } from "@mui/material";
+import { Box, CssBaseline, Drawer, useMediaQuery } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { ChatBrandBar } from "./ChatBrandBar";
 import { ChatStatusBar } from "./ChatStatusBar";
@@ -137,7 +137,12 @@ export default function ChatPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Below this width the sidebar becomes a slide-over Drawer instead of a
+  // permanent column, and `sidebarOpen` drives that Drawer's open state.
+  const isMobile = useMediaQuery("(max-width:900px)");
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window === "undefined" || window.innerWidth >= 900,
+  );
   // Composer text is lifted here so a suggestion click can pre-fill it.
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -220,6 +225,13 @@ export default function ChatPage() {
     };
     setChats((prev) => [newChat, ...prev]);
     setActiveChat(newChat);
+    if (isMobile) setSidebarOpen(false);
+  };
+
+  // Selecting a chat on mobile also dismisses the slide-over sidebar.
+  const handleSelectChat = (chat: Chat) => {
+    setActiveChat(chat);
+    if (isMobile) setSidebarOpen(false);
   };
 
   const handleDeleteChat = (chatId: string) => {
@@ -468,9 +480,12 @@ export default function ChatPage() {
       <Box
         sx={{
           display: "grid",
-          gridTemplateColumns: `${sidebarOpen ? 320 : 0}px 1fr`,
+          gridTemplateColumns: {
+            xs: "1fr",
+            md: `${sidebarOpen ? 320 : 0}px 1fr`,
+          },
           gridTemplateRows: "72px 1fr",
-          height: "100vh",
+          height: "100dvh",
           width: "100%",
           backgroundColor: "#0e1411",
           color: "#ece8df",
@@ -478,36 +493,39 @@ export default function ChatPage() {
           overflow: "hidden",
         }}
       >
-        {sidebarOpen && <ChatBrandBar />}
+        {!isMobile && sidebarOpen && <ChatBrandBar />}
         <ChatStatusBar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />
 
-        <Box
-          sx={{
-            gridColumn: 1,
-            gridRow: 2,
-            overflow: "hidden",
-            borderRight: sidebarOpen ? "1px solid #1a201c" : "none",
-          }}
-        >
-          <Sidebar
-            chats={chats}
-            activeChat={activeChat}
-            onSelectChat={setActiveChat}
-            onNewChat={handleNewChat}
-            onDeleteChat={handleDeleteChat}
-          />
-        </Box>
+        {!isMobile && (
+          <Box
+            sx={{
+              gridColumn: 1,
+              gridRow: 2,
+              overflow: "hidden",
+              borderRight: sidebarOpen ? "1px solid #1a201c" : "none",
+            }}
+          >
+            <Sidebar
+              chats={chats}
+              activeChat={activeChat}
+              onSelectChat={handleSelectChat}
+              onNewChat={handleNewChat}
+              onDeleteChat={handleDeleteChat}
+            />
+          </Box>
+        )}
 
         <Box
           sx={{
-            gridColumn: 2,
+            gridColumn: { xs: 1, md: 2 },
             gridRow: 2,
             display: "flex",
             flexDirection: "column",
             minHeight: 0,
+            minWidth: 0,
           }}
         >
           {activeChat ? (
@@ -517,8 +535,8 @@ export default function ChatPage() {
                   display: "flex",
                   alignItems: "center",
                   gap: 2,
-                  px: 5,
-                  py: 3,
+                  px: { xs: 2.5, md: 5 },
+                  py: { xs: 2, md: 3 },
                   borderBottom: "1px solid #1a201c",
                 }}
               >
@@ -607,6 +625,46 @@ export default function ChatPage() {
           )}
         </Box>
       </Box>
+
+      {isMobile && (
+        <Drawer
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          slotProps={{
+            paper: {
+              sx: {
+                width: "min(320px, 85vw)",
+                backgroundColor: "#0e1411",
+                backgroundImage: "none",
+                borderRight: "1px solid #1a201c",
+              },
+            },
+          }}
+        >
+          <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <Box
+              sx={{
+                height: 72,
+                flex: "none",
+                display: "flex",
+                "& > *": { flexGrow: 1, borderRight: "none" },
+              }}
+            >
+              <ChatBrandBar />
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <Sidebar
+                chats={chats}
+                activeChat={activeChat}
+                onSelectChat={handleSelectChat}
+                onNewChat={handleNewChat}
+                onDeleteChat={handleDeleteChat}
+              />
+            </Box>
+          </Box>
+        </Drawer>
+      )}
     </ThemeProvider>
   );
 }

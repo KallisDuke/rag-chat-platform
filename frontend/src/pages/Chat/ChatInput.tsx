@@ -85,7 +85,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <Box sx={{ px: 5, pt: 2, pb: 3.5, borderTop: "1px solid #1a201c" }}>
+    <Box sx={{ px: { xs: 2, md: 5 }, pt: 2, pb: { xs: 2.5, md: 3.5 }, borderTop: "1px solid #1a201c" }}>
       <Box sx={{ maxWidth: 860, mx: "auto" }}>
         <Box
           sx={{
