@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../../config";
-import { Chat, Message } from "./types";
+import { Chat, ChatTurn, Message } from "./types";
 
 // Shape returned by the backend; timestamps arrive as ISO strings over JSON.
 interface ConversationDTO {
@@ -96,4 +96,20 @@ export const deleteConversation = async (id: string): Promise<void> => {
   });
 
   if (!res.ok) throw new Error("Failed to delete conversation");
+};
+
+// Ask the backend for follow-up prompt suggestions based on the conversation.
+export const fetchSuggestions = async (
+  history: ChatTurn[],
+): Promise<string[]> => {
+  const res = await fetch(`${API_BASE_URL}/suggestions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ history }),
+  });
+
+  if (!res.ok) throw new Error("Failed to load suggestions");
+
+  const data: { suggestions?: string[] } = await res.json();
+  return Array.isArray(data.suggestions) ? data.suggestions : [];
 };

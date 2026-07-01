@@ -43,6 +43,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isLoading = message.content === "...";
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  // Which citation's matched snippet is expanded (Feature 3); null = none.
+  const [expandedSource, setExpandedSource] = useState<number | null>(null);
 
   const timeLabel = message.timestamp.toLocaleTimeString([], {
     hour: "numeric",
@@ -140,30 +142,104 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
       ) : (
         <>
           {message.sources && message.sources.length > 0 && (
-            <Box sx={{ display: "flex", gap: 1.25, flexWrap: "wrap", maxWidth: 700 }}>
-              {message.sources.map((s, i) => (
-                <Box
-                  key={i}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                    px: 1.5,
-                    py: 0.75,
-                    backgroundColor: "#141a16",
-                    border: "1px solid #1f2521",
-                    borderRadius: "5px",
-                    fontSize: 12,
-                    letterSpacing: "0.3px",
-                    color: "#b8bdb5",
-                  }}
-                >
-                  <Box component="span" sx={{ color: "#c8a96a", fontWeight: 600 }}>
-                    [{i + 1}]
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25, maxWidth: 700, width: "100%" }}>
+              <Box sx={{ display: "flex", gap: 1.25, flexWrap: "wrap" }}>
+                {message.sources.map((s, i) => {
+                  const hasDetail =
+                    Boolean(s.content) || typeof s.score === "number";
+                  const isOpen = expandedSource === i;
+                  return (
+                    <Box
+                      key={i}
+                      component="button"
+                      type="button"
+                      onClick={
+                        hasDetail
+                          ? () => setExpandedSource(isOpen ? null : i)
+                          : undefined
+                      }
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        px: 1.5,
+                        py: 0.75,
+                        backgroundColor: isOpen ? "#1a201c" : "#141a16",
+                        border: "1px solid",
+                        borderColor: isOpen ? "#2a302c" : "#1f2521",
+                        borderRadius: "5px",
+                        fontFamily: "inherit",
+                        fontSize: 12,
+                        letterSpacing: "0.3px",
+                        color: "#b8bdb5",
+                        cursor: hasDetail ? "pointer" : "default",
+                        "&:hover": hasDetail
+                          ? { borderColor: "#2a302c", color: "#ece8df" }
+                          : {},
+                      }}
+                    >
+                      <Box component="span" sx={{ color: "#c8a96a", fontWeight: 600 }}>
+                        [{i + 1}]
+                      </Box>
+                      <span>{String(s.source)}</span>
+                      {typeof s.score === "number" && (
+                        <Box component="span" sx={{ color: "#6f7670" }}>
+                          {s.score.toFixed(3)}
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })}
+              </Box>
+
+              {expandedSource !== null &&
+                message.sources[expandedSource]?.content && (
+                  <Box
+                    sx={{
+                      p: 1.75,
+                      backgroundColor: "#0e1411",
+                      border: "1px solid #1f2521",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                        mb: 1,
+                        fontSize: 11,
+                        letterSpacing: "0.5px",
+                        color: "#6f7670",
+                      }}
+                    >
+                      <Box component="span" sx={{ color: "#c8a96a", fontWeight: 600 }}>
+                        [{expandedSource + 1}]
+                      </Box>
+                      <span>{String(message.sources[expandedSource].source)}</span>
+                      {typeof message.sources[expandedSource].score ===
+                        "number" && (
+                        <>
+                          <span>·</span>
+                          <span>
+                            score{" "}
+                            {message.sources[expandedSource].score!.toFixed(3)}
+                          </span>
+                        </>
+                      )}
+                    </Box>
+                    <Typography
+                      sx={{
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                        color: "#9aa097",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {message.sources[expandedSource].content}
+                    </Typography>
                   </Box>
-                  <span>{String(s.source)}</span>
-                </Box>
-              ))}
+                )}
             </Box>
           )}
 

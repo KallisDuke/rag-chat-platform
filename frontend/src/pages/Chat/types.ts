@@ -7,6 +7,15 @@ export interface FileAttachment {
 
 export interface SourceRef {
   source: string;
+  // Present on freshly-retrieved sources (Feature 3); older persisted
+  // conversations may only have `source`.
+  content?: string;
+  score?: number;
+}
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface Message {

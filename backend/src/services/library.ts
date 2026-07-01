@@ -44,3 +44,21 @@ export const listLibraryDocuments = async (): Promise<LibraryDocument[]> => {
     indexedAt: row.indexedAt,
   }));
 };
+
+// Removes a document and every chunk indexed under it. Returns the number of
+// chunks deleted (0 when the source is not present in the collection).
+export const deleteLibraryDocument = async (
+  source: string,
+): Promise<number> => {
+  const collectionName = process.env.COLLECTION_NAME;
+
+  if (!collectionName) {
+    throw new Error("COLLECTION_NAME environment variable is required");
+  }
+
+  const collection = getDB().collection(collectionName);
+
+  const result = await collection.deleteMany({ source });
+
+  return result.deletedCount ?? 0;
+};
