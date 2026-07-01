@@ -74,7 +74,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const groups = useMemo(() => groupChats(filtered), [filtered]);
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 320 }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "100%",
+        minWidth: { xs: 0, md: 320 },
+      }}
+    >
       <Box sx={{ p: 2.5 }}>
         <Button
           fullWidth

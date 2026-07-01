@@ -71,10 +71,10 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
       direction="row"
       alignItems="center"
       sx={{
-        gridColumn: 2,
+        gridColumn: { xs: 1, md: 2 },
         gridRow: 1,
-        px: 4,
-        gap: 3,
+        px: { xs: 2, md: 4 },
+        gap: { xs: 1.25, md: 3 },
         borderBottom: "1px solid #1a201c",
         overflow: "hidden",
       }}
@@ -93,7 +93,12 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
         <MenuIcon sx={{ fontSize: 20 }} />
       </IconButton>
 
-      <Stack direction="row" spacing={1.75} alignItems="center">
+      <Stack
+        direction="row"
+        spacing={1.75}
+        alignItems="center"
+        sx={{ display: { xs: "none", md: "flex" } }}
+      >
         <Box
           sx={{
             width: 36,
@@ -128,7 +133,7 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
           component={Link}
           to="/admin"
           sx={{
-            display: "flex",
+            display: { xs: "none", sm: "flex" },
             alignItems: "center",
             gap: 1,
             height: 40,
@@ -148,7 +153,12 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
         </Box>
       )}
 
-      <Stack direction="row" spacing={1.25} alignItems="center">
+      <Stack
+        direction="row"
+        spacing={1.25}
+        alignItems="center"
+        sx={{ display: { xs: "none", lg: "flex" } }}
+      >
         <Box sx={pillSx}>
           <Box
             component="span"
@@ -175,7 +185,7 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
           alignItems: "center",
           gap: 1.25,
           height: 40,
-          px: 2,
+          px: { xs: 1.5, sm: 2 },
           backgroundColor: "#ece8df",
           color: "#0e1411",
           borderRadius: "5px",
@@ -188,7 +198,9 @@ export const ChatStatusBar: React.FC<ChatStatusBarProps> = ({
         }}
       >
         <UploadFileIcon sx={{ fontSize: 18 }} />
-        Upload
+        <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+          Upload
+        </Box>
       </Box>
     </Stack>
   );

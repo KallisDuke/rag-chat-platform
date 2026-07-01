@@ -49,7 +49,12 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({ pendingCount }) => {
     <Stack
       direction="row"
       alignItems="center"
-      sx={{ height: 72, px: 4, gap: 3, borderBottom: "1px solid #1a201c" }}
+      sx={{
+        height: 72,
+        px: { xs: 2, md: 4 },
+        gap: { xs: 1.5, md: 3 },
+        borderBottom: "1px solid #1a201c",
+      }}
     >
       <Stack direction="row" alignItems="center" spacing={2} sx={{ flex: "none" }}>
         <Box sx={{ width: 28, height: 28, position: "relative" }}>
@@ -83,7 +88,14 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({ pendingCount }) => {
             }}
           />
         </Box>
-        <Typography sx={{ fontSize: 17, fontWeight: 600, letterSpacing: "0.3px" }}>
+        <Typography
+          sx={{
+            fontSize: 17,
+            fontWeight: 600,
+            letterSpacing: "0.3px",
+            display: { xs: "none", sm: "block" },
+          }}
+        >
           Kallis
           <Box component="span" sx={{ color: "#c8a96a" }}>
             .
@@ -91,7 +103,7 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({ pendingCount }) => {
         </Typography>
       </Stack>
 
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ ml: 1 }}>
+      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ ml: { xs: 0, md: 1 } }}>
         <Box component={Link} to="/chat" sx={crumbSx}>
           chat
         </Box>
@@ -121,7 +133,12 @@ export const AdminTopBar: React.FC<AdminTopBarProps> = ({ pendingCount }) => {
 
       <Box sx={{ flex: 1 }} />
 
-      <Stack direction="row" spacing={1.25} alignItems="center">
+      <Stack
+        direction="row"
+        spacing={1.25}
+        alignItems="center"
+        sx={{ display: { xs: "none", sm: "flex" } }}
+      >
         <Box sx={pillSx}>
           <Box
             component="span"

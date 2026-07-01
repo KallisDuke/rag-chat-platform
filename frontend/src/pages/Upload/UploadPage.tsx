@@ -87,7 +87,7 @@ export const UploadPage: React.FC = () => {
         sx={{
           display: "grid",
           gridTemplateRows: "72px 1fr",
-          height: "100vh",
+          height: "100dvh",
           width: "100%",
           backgroundColor: "#0e1411",
           color: "#ece8df",
@@ -96,13 +96,13 @@ export const UploadPage: React.FC = () => {
         <UploadTopBar totalDocuments={totalDocuments} totalChunks={totalChunks} />
 
         <Box sx={{ overflowY: "auto" }}>
-          <Box sx={{ maxWidth: 1200, mx: "auto", px: 5, pt: 6, pb: 10 }}>
+          <Box sx={{ maxWidth: 1200, mx: "auto", px: { xs: 2.5, md: 5 }, pt: { xs: 4, md: 6 }, pb: { xs: 6, md: 10 } }}>
             <Box sx={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", mb: 4 }}>
               <Box>
                 <Typography sx={{ fontSize: 11, letterSpacing: "2px", textTransform: "uppercase", color: "#6f7670", mb: 1 }}>
                   ◐ Knowledge base
                 </Typography>
-                <Typography sx={{ fontSize: 32, fontWeight: 500, letterSpacing: "-0.5px", color: "#f5f1e8" }}>
+                <Typography sx={{ fontSize: { xs: 24, md: 32 }, fontWeight: 500, letterSpacing: "-0.5px", color: "#f5f1e8" }}>
                   Upload documents
                 </Typography>
                 <Typography sx={{ fontSize: 13, color: "#8a9088", mt: 1, lineHeight: 1.5, maxWidth: 560 }}>

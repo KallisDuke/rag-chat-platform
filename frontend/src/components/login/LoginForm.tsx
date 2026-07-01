@@ -103,7 +103,7 @@ export default function LoginForm() {
         sx={{
           fontFamily: "inherit",
           fontWeight: 400,
-          fontSize: 56,
+          fontSize: { xs: 40, sm: 56 },
           lineHeight: 1.05,
           letterSpacing: "-1px",
           color: "#0e1411",

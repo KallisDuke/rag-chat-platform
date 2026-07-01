@@ -35,8 +35,17 @@ export const MessageList: React.FC<MessageListProps> = ({
     lastMessage.content !== "...";
 
   return (
-    <Box sx={{ flex: 1, overflowY: "auto", py: 5 }}>
-      <Box sx={{ maxWidth: 860, mx: "auto", px: 5, display: "flex", flexDirection: "column", gap: 5 }}>
+    <Box sx={{ flex: 1, overflowY: "auto", py: { xs: 3, md: 5 } }}>
+      <Box
+        sx={{
+          maxWidth: 860,
+          mx: "auto",
+          px: { xs: 2.5, md: 5 },
+          display: "flex",
+          flexDirection: "column",
+          gap: { xs: 4, md: 5 },
+        }}
+      >
         {messages.map((message, index) => {
           const isLast = index === messages.length - 1;
           const precedingUser =

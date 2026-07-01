@@ -62,7 +62,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   if (isUser) {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, fontSize: 12, letterSpacing: "0.5px", color: "#6f7670" }}>
+        <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1.25, fontSize: 12, letterSpacing: "0.5px", color: "#6f7670" }}>
           <span>you</span>
           <span>·</span>
           <span>{timeLabel}</span>
@@ -106,8 +106,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   }
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1.5 }}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.25, fontSize: 12, letterSpacing: "0.5px", color: "#6f7670" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1.5, width: "100%" }}>
+      <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1.25, fontSize: 12, letterSpacing: "0.5px", color: "#6f7670" }}>
         <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
           <Box component="span" sx={{ width: 6, height: 6, backgroundColor: "#c8a96a", borderRadius: "50%" }} />
           <Box component="span" sx={{ color: "#c8a96a" }}>
