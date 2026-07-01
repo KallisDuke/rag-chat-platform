@@ -4,6 +4,7 @@ import cors from "cors";
 import { connectDB } from "./db/mongo.ts";
 import uploadRouter from "./routes/upload.ts";
 import queryRouter from "./routes/query.ts";
+import suggestionsRouter from "./routes/suggestions.ts";
 import loginRouter from "./routes/auth.ts";
 import libraryRouter from "./routes/library.ts";
 import accessRequestsRouter from "./routes/accessRequests.ts";
@@ -17,6 +18,7 @@ app.use(cors());
 
 app.use("/upload", uploadRouter);
 app.use("/query", queryRouter);
+app.use("/suggestions", suggestionsRouter);
 app.use("/login", loginRouter);
 app.use("/library", libraryRouter);
 app.use("/access-requests", accessRequestsRouter);

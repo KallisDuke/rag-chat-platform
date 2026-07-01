@@ -7,23 +7,34 @@ import { FileAttachment } from "./types";
 interface ChatInputProps {
   onSendMessage: (message: string, files?: FileAttachment[]) => void;
   disabled?: boolean;
+  topK: number;
+  onTopKChange: (value: number) => void;
+  // Controlled input text, lifted to the parent so suggestion clicks can
+  // pre-fill it. `inputRef` lets the parent focus the field after filling.
+  input: string;
+  onInputChange: (value: string) => void;
+  inputRef?: React.Ref<HTMLTextAreaElement>;
 }
 
-const SUGGESTED_PROMPTS = [
-  "summarize what I've uploaded",
-  "find docs mentioning vector index",
-  "what's in my latest upload?",
-];
+// How many chunks to retrieve per query; clicking the chip cycles through these.
+const TOP_K_OPTIONS = [3, 5, 8];
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false }) => {
-  const [input, setInput] = useState("");
+export const ChatInput: React.FC<ChatInputProps> = ({
+  onSendMessage,
+  disabled = false,
+  topK,
+  onTopKChange,
+  input,
+  onInputChange,
+  inputRef,
+}) => {
   const [files, setFiles] = useState<FileAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = () => {
     if (input.trim() || files.length > 0) {
       onSendMessage(input, files.length > 0 ? files : undefined);
-      setInput("");
+      onInputChange("");
       setFiles([]);
     }
   };
@@ -67,6 +78,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
     setFiles(files.filter((_, i) => i !== index));
   };
 
+  const cycleTopK = () => {
+    const currentIndex = TOP_K_OPTIONS.indexOf(topK);
+    const next = TOP_K_OPTIONS[(currentIndex + 1) % TOP_K_OPTIONS.length];
+    onTopKChange(next);
+  };
+
   return (
     <Box sx={{ px: 5, pt: 2, pb: 3.5, borderTop: "1px solid #1a201c" }}>
       <Box sx={{ maxWidth: 860, mx: "auto" }}>
@@ -88,7 +105,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
                   label={file.name}
                   onDelete={() => removeFile(index)}
                   size="small"
-                  sx={{ backgroundColor: "#1a201c", color: "#ece8df", fontSize: 13 }}
+                  sx={{
+                    backgroundColor: "#1a201c",
+                    color: "#ece8df",
+                    fontSize: 13,
+                  }}
                 />
               ))}
             </Box>
@@ -99,9 +120,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
             multiline
             maxRows={6}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={disabled}
+            inputRef={inputRef}
             placeholder="ask anything, or attach a doc"
             variant="standard"
             slotProps={{ input: { disableUnderline: true } }}
@@ -119,7 +141,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
             }}
           />
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1.5, flexWrap: "wrap" }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              mt: 1.5,
+              flexWrap: "wrap",
+            }}
+          >
             <input
               ref={fileInputRef}
               type="file"
@@ -155,19 +185,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
             </Box>
 
             <Box
+              component="button"
+              type="button"
+              onClick={cycleTopK}
+              disabled={disabled}
+              title="chunks retrieved per query — click to change"
               sx={{
                 display: "flex",
                 alignItems: "center",
                 height: 34,
                 px: 1.5,
+                backgroundColor: "transparent",
                 border: "1px solid #1f2521",
                 borderRadius: "5px",
                 color: "#8a9088",
+                fontFamily: "inherit",
                 fontSize: 13,
                 letterSpacing: "0.3px",
+                cursor: "pointer",
+                "&:hover": { borderColor: "#2a302c", color: "#ece8df" },
+                "&:disabled": { opacity: 0.5, cursor: "default" },
               }}
             >
-              top-k 5
+              top-k {topK}
             </Box>
 
             <Box sx={{ flex: 1 }} />
@@ -196,41 +236,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = 
                 fontWeight: 600,
                 letterSpacing: "0.3px",
                 "&:hover": { backgroundColor: "#d4b878" },
-                "&.Mui-disabled": { backgroundColor: "#2a302c", color: "#6f7670" },
+                "&.Mui-disabled": {
+                  backgroundColor: "#2a302c",
+                  color: "#6f7670",
+                },
               }}
             >
               send
               <SendIcon sx={{ fontSize: 16, ml: 1 }} />
             </IconButton>
           </Box>
-        </Box>
-
-        <Box sx={{ display: "flex", gap: 1.25, mt: 2, flexWrap: "wrap", justifyContent: "center" }}>
-          {SUGGESTED_PROMPTS.map((prompt) => (
-            <Box
-              key={prompt}
-              component="button"
-              type="button"
-              onClick={() => setInput(prompt)}
-              disabled={disabled}
-              sx={{
-                backgroundColor: "transparent",
-                border: "1px solid #1f2521",
-                borderRadius: "5px",
-                px: 1.5,
-                py: 0.75,
-                color: "#6f7670",
-                fontFamily: "inherit",
-                fontSize: 12,
-                letterSpacing: "0.4px",
-                cursor: "pointer",
-                "&:hover": { borderColor: "#2a302c", color: "#ece8df" },
-                "&:disabled": { opacity: 0.5, cursor: "default" },
-              }}
-            >
-              {prompt}
-            </Box>
-          ))}
         </Box>
       </Box>
     </Box>

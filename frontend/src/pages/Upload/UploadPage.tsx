@@ -59,6 +59,25 @@ export const UploadPage: React.FC = () => {
     };
   }, [refreshKey]);
 
+  const handleDelete = async (source: string) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/library`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ source }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error ?? `Failed to delete: ${response.statusText}`);
+    }
+
+    setRefreshKey((k) => k + 1);
+  };
+
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
@@ -99,6 +118,7 @@ export const UploadPage: React.FC = () => {
               totalDocuments={totalDocuments}
               loading={loading}
               error={error}
+              onDelete={handleDelete}
             />
           </Box>
         </Box>

@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { Box, InputBase, Typography } from "@mui/material";
+import { Box, IconButton, InputBase, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { LibraryDocument } from "./types";
+import { isAdmin } from "../../utils";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const PAGE_SIZE = 8;
 
@@ -29,6 +32,7 @@ interface LibraryTableProps {
   totalDocuments: number;
   loading: boolean;
   error: string | null;
+  onDelete?: (source: string) => Promise<void>;
 }
 
 export const LibraryTable: React.FC<LibraryTableProps> = ({
@@ -36,9 +40,38 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
   totalDocuments,
   loading,
   error,
+  onDelete,
 }) => {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pendingDoc, setPendingDoc] = useState<LibraryDocument | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const admin = isAdmin();
+
+  const closeDialog = () => {
+    if (deleting) return;
+    setPendingDoc(null);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!onDelete || !pendingDoc) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete(pendingDoc.source);
+      setPendingDoc(null);
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete document",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const filtered = useMemo(
     () =>
@@ -187,8 +220,26 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
                 {formatFileSize(doc.sizeBytes)}
               </Box>
               <Box sx={{ fontSize: 13, color: "#8a9088" }}>{formatIndexedDate(doc.indexedAt)}</Box>
-              <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end" }}>
-                <Box component="span" title="indexed" sx={{ width: 7, height: 7, backgroundColor: "#6fbf73", borderRadius: "50%" }} />
+              <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", justifyContent: "flex-end" }}>
+                {admin ? (
+                  <IconButton
+                    size="small"
+                    title="Delete document"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setPendingDoc(doc);
+                    }}
+                    sx={{
+                      color: "#6f7670",
+                      p: 0.5,
+                      "&:hover": { color: "#c87a5a", backgroundColor: "transparent" },
+                    }}
+                  >
+                    <DeleteOutlineIcon sx={{ fontSize: 17 }} />
+                  </IconButton>
+                ) : (
+                  <Box component="span" title="indexed" sx={{ width: 7, height: 7, backgroundColor: "#6fbf73", borderRadius: "50%" }} />
+                )}
               </Box>
             </Box>
           ))}
@@ -264,6 +315,28 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
           </Box>
         </Box>
       )}
+
+      <ConfirmDialog
+        open={pendingDoc !== null}
+        title="Delete document"
+        description={
+          pendingDoc && (
+            <>
+              Permanently delete{" "}
+              <Box component="span" sx={{ color: "#ece8df", fontWeight: 600 }}>
+                {pendingDoc.source}
+              </Box>{" "}
+              and all {pendingDoc.chunks} indexed chunk
+              {pendingDoc.chunks === 1 ? "" : "s"}? This cannot be undone.
+            </>
+          )
+        }
+        confirmLabel="Delete"
+        loading={deleting}
+        error={deleteError}
+        onConfirm={confirmDelete}
+        onCancel={closeDialog}
+      />
     </Box>
   );
 };
