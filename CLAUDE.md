@@ -42,6 +42,8 @@ All commands are run from inside `backend/` or `frontend/` respectively (no root
 
 The backend reads from `backend/.env` (no `.env.example` checked in). Required keys: `MONGODB_URI`, `DB_NAME`, `COLLECTION_NAME`, `USER_COLLECTION_NAME`, `JWT_SECRET`, `OPENAI_API_KEY`, optionally `PORT` (defaults to 3000).
 
+Optional S3 keys for original-file storage (powers the chat citation viewer): `AWS_REGION`, `S3_BUCKET_NAME`, plus credentials via the standard AWS chain (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`). Without them the app works normally but originals aren't stored and `GET /library/file` returns 404 (`src/utils/s3.ts` — `isS3Configured()`).
+
 ## Architecture
 
 ### Backend: RAG pipeline over MongoDB Atlas Vector Search
@@ -49,7 +51,8 @@ The backend reads from `backend/.env` (no `.env.example` checked in). Required k
 - `src/server.ts` — Express app entry point. Mounts `/upload`, `/query`, `/login`, and `/health`. Connects to MongoDB before binding the port.
 - `src/db/mongo.ts` — single shared `Db` instance via `connectDB()`/`getDB()`. `getDB()` throws if called before `connectDB()` resolves, so route/service code assumes the connection is already established.
 - `src/utils/embeddings.ts` — single shared `OpenAIEmbeddings` instance (`text-embedding-3-small`), imported by both ingest and query paths to keep embedding behavior consistent.
-- `src/services/ingest.ts` — chunks input text with `RecursiveCharacterTextSplitter` (1000/200 overlap), embeds each chunk, and inserts one Mongo document per chunk (`content`, `embedding`, `source`, `createdAt`) into `COLLECTION_NAME`.
+- `src/services/ingest.ts` — chunks input text with `RecursiveCharacterTextSplitter` (1000/200 overlap), embeds each chunk, and inserts one Mongo document per chunk (`content`, `embedding`, `source`, `sizeBytes`, optional `pageNumber`, `createdAt`) into `COLLECTION_NAME`. PDFs are chunked per page so each chunk records its page for citation deep-linking.
+- `src/utils/s3.ts` — optional S3 storage for original uploads, keyed `documents/<source>`. Uploads store the original before ingesting; `GET /library/file?source=...` streams it back (proxied through the backend so the bucket stays private, no CORS needed); deleting a library document also deletes the original (best effort).
 - `src/services/rag.ts` — embeds the incoming question, runs a `$vectorSearch` aggregation against the same collection (index name `vector_index`, must exist in Atlas), concatenates retrieved chunk content into a context block, and asks `ChatOpenAI` (`gpt-4.1-mini`) to answer using only that context. Returns `{ answer, sources }`.
 - `src/routes/upload.ts` — accepts either raw `text` in the body and/or multipart files (`multer`, memory storage, 10MB/10-file limit). PDFs are parsed via `pdf-parse`; plaintext-like extensions are decoded as UTF-8; anything else is rejected. Each document/file is run through `ingestDocument` independently and per-source chunk counts are returned.
 - `src/routes/query.ts` — thin wrapper around `askQuestion`, protected by `authMiddleware`.

@@ -6,6 +6,7 @@ import { ChatStatusBar } from "./ChatStatusBar";
 import { Sidebar } from "./Sidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { DocumentViewer } from "./DocumentViewer";
 import { Chat, ChatTurn, FileAttachment, Message, SourceRef } from "./types";
 import { API_BASE_URL } from "../../config";
 import { getEmail } from "../../utils";
@@ -159,6 +160,8 @@ export default function ChatPage() {
   // Last conversation state we fetched suggestions for, to skip duplicate
   // fetches (e.g. when a new chat's id flips local- -> backend mid-settle).
   const lastSuggestionKeyRef = useRef("");
+  // Citation currently opened in the document viewer drawer; null = closed.
+  const [viewerCitation, setViewerCitation] = useState<SourceRef | null>(null);
 
   // Load this user's saved conversations once on mount.
   useEffect(() => {
@@ -576,6 +579,7 @@ export default function ChatPage() {
                 isLoading={isLoading}
                 suggestions={suggestions}
                 onSelectSuggestion={handleSelectSuggestion}
+                onOpenCitation={setViewerCitation}
               />
               <ChatInput
                 onSendMessage={handleSendMessage}
@@ -625,6 +629,11 @@ export default function ChatPage() {
           )}
         </Box>
       </Box>
+
+      <DocumentViewer
+        citation={viewerCitation}
+        onClose={() => setViewerCitation(null)}
+      />
 
       {isMobile && (
         <Drawer

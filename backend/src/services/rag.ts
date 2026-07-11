@@ -24,6 +24,9 @@ export interface Citation {
   source: string;
   content: string;
   score: number;
+  // Page in the original document the chunk came from (PDFs only) — used by
+  // the client's citation viewer to deep-link into the file.
+  pageNumber?: number;
 }
 
 // Only the most recent turns are replayed to the model — enough for follow-ups
@@ -37,6 +40,7 @@ interface RetrievedDoc {
   content: string;
   source: string;
   score: number;
+  pageNumber?: number;
 }
 
 const clampTopK = (topK: number | undefined): number => {
@@ -85,6 +89,7 @@ const retrieveContext = async (
           _id: 0,
           content: 1,
           source: 1,
+          pageNumber: 1,
           score: { $meta: "vectorSearchScore" },
         },
       },
@@ -187,6 +192,9 @@ const toCitations = (docs: RetrievedDoc[]): Citation[] =>
     source: doc.source,
     content: snippet(doc.content),
     score: typeof doc.score === "number" ? doc.score : 0,
+    ...(typeof doc.pageNumber === "number"
+      ? { pageNumber: doc.pageNumber }
+      : {}),
   }));
 
 // Non-streaming answer — returns the full result once generation completes.

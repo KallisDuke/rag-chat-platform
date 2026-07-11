@@ -1,10 +1,12 @@
 import path from "node:path";
 
 import express, { type Request, type Response } from "express";
+import mammoth from "mammoth";
 import multer from "multer";
 import { PDFParse } from "pdf-parse";
 
-import { ingestDocument } from "../services/ingest.ts";
+import { ingestDocument, type PageText } from "../services/ingest.ts";
+import { isS3Configured, uploadOriginalFile } from "../utils/s3.ts";
 import { authMiddleware } from "../middleware/auth.ts";
 
 const router = express.Router();
@@ -57,7 +59,16 @@ const getUploadedFiles = (req: Request): Express.Multer.File[] => {
   return Array.isArray(req.files) ? req.files : Object.values(req.files).flat();
 };
 
-const extractFileText = async (file: Express.Multer.File): Promise<string> => {
+interface ExtractedContent {
+  text: string;
+  // Per-page text for PDFs, so chunks can record their page for citation
+  // deep-linking. Absent for plain-text files.
+  pages?: PageText[];
+}
+
+const extractFileContent = async (
+  file: Express.Multer.File,
+): Promise<ExtractedContent> => {
   const extension = path.extname(file.originalname).toLowerCase();
 
   if (file.mimetype === "application/pdf" || extension === ".pdf") {
@@ -65,19 +76,49 @@ const extractFileText = async (file: Express.Multer.File): Promise<string> => {
 
     try {
       const result = await parser.getText();
-      return result.text;
+
+      return {
+        text: result.text,
+        pages: result.pages.map((page) => ({
+          pageNumber: page.num,
+          text: page.text,
+        })),
+      };
     } finally {
       await parser.destroy();
     }
   }
 
+  if (
+    file.mimetype ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    extension === ".docx"
+  ) {
+    const result = await mammoth.extractRawText({ buffer: file.buffer });
+
+    return { text: result.value };
+  }
+
   if (file.mimetype.startsWith("text/") || textFileExtensions.has(extension)) {
-    return file.buffer.toString("utf8");
+    return { text: file.buffer.toString("utf8") };
   }
 
   throw new Error(
-    `Unsupported file type for "${file.originalname}". Upload a PDF or text-based file.`,
+    `Unsupported file type for "${file.originalname}". Upload a PDF, Word (.docx), or text-based file.`,
   );
+};
+
+// Keep a copy of the original bytes in S3 (keyed by source) so the chat's
+// citation viewer can open the real document later. Stored before ingesting so
+// a storage failure doesn't leave chunks pointing at a missing original.
+const storeOriginal = async (
+  source: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> => {
+  if (!isS3Configured()) return;
+
+  await uploadOriginalFile(source, body, contentType);
 };
 
 router.post(
@@ -107,25 +148,32 @@ router.post(
 
       if (text) {
         const source = body.source?.trim() || "submitted-text.txt";
-        const chunks = await ingestDocument(
-          text,
-          source,
-          Buffer.byteLength(text, "utf8"),
-        );
+        const buffer = Buffer.from(text, "utf8");
+
+        await storeOriginal(source, buffer, "text/plain; charset=utf-8");
+
+        const chunks = await ingestDocument(text, source, buffer.byteLength);
         documents.push({ source, chunks });
       }
 
       for (const file of files) {
-        const fileText = (await extractFileText(file)).trim();
+        const { text: fileText, pages } = await extractFileContent(file);
 
-        if (!fileText) {
+        if (!fileText.trim()) {
           throw new Error(`No readable text found in "${file.originalname}".`);
         }
 
+        await storeOriginal(
+          file.originalname,
+          file.buffer,
+          file.mimetype || "application/octet-stream",
+        );
+
         const chunks = await ingestDocument(
-          fileText,
+          fileText.trim(),
           file.originalname,
           file.size,
+          pages,
         );
         documents.push({ source: file.originalname, chunks });
       }

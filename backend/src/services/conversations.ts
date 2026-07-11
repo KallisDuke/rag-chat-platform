@@ -8,7 +8,12 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   timestamp: string | Date;
   files?: { name: string; size: number; type: string }[];
-  sources?: { source: string; content?: string; score?: number }[];
+  sources?: {
+    source: string;
+    content?: string;
+    score?: number;
+    pageNumber?: number;
+  }[];
   durationMs?: number;
 }
 
