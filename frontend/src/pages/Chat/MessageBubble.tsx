@@ -4,7 +4,8 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ReplayIcon from "@mui/icons-material/Replay";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbDownOffAltIcon from "@mui/icons-material/ThumbDownOffAlt";
-import { Message } from "./types";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import { Message, SourceRef } from "./types";
 
 const typingBar = keyframes`
   0% { transform: scaleY(0.3); }
@@ -15,7 +16,53 @@ const typingBar = keyframes`
 interface MessageBubbleProps {
   message: Message;
   onRegenerate?: () => void;
+  // Opens the citation's original document in the side viewer.
+  onOpenCitation?: (source: SourceRef) => void;
 }
+
+// Render the answer text with inline [n] citation markers turned into buttons
+// that open the cited document. Markers without a matching source (or when no
+// viewer callback is wired) render as plain text.
+const renderAnswerText = (
+  content: string,
+  sources: SourceRef[] | undefined,
+  onOpenCitation?: (source: SourceRef) => void,
+): React.ReactNode => {
+  if (!onOpenCitation || !sources || sources.length === 0) return content;
+
+  return content.split(/(\[\d+\])/g).map((part, i) => {
+    const marker = part.match(/^\[(\d+)\]$/);
+    const source = marker ? sources[Number(marker[1]) - 1] : undefined;
+
+    if (!source) return <React.Fragment key={i}>{part}</React.Fragment>;
+
+    return (
+      <Box
+        key={i}
+        component="button"
+        type="button"
+        title={`open ${source.source}${
+          typeof source.pageNumber === "number"
+            ? ` at page ${source.pageNumber}`
+            : ""
+        }`}
+        onClick={() => onOpenCitation(source)}
+        sx={{
+          background: "none",
+          border: "none",
+          p: 0,
+          font: "inherit",
+          color: "#c8a96a",
+          fontWeight: 600,
+          cursor: "pointer",
+          "&:hover": { textDecoration: "underline" },
+        }}
+      >
+        {part}
+      </Box>
+    );
+  });
+};
 
 const TypingIndicator: React.FC = () => (
   <Box sx={{ display: "flex", alignItems: "center", height: 18, gap: "4px" }}>
@@ -38,6 +85,7 @@ const TypingIndicator: React.FC = () => (
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   onRegenerate,
+  onOpenCitation,
 }) => {
   const isUser = message.role === "user";
   const isLoading = message.content === "...";
@@ -182,6 +230,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                         [{i + 1}]
                       </Box>
                       <span>{String(s.source)}</span>
+                      {typeof s.pageNumber === "number" && (
+                        <Box component="span" sx={{ color: "#6f7670" }}>
+                          p.{s.pageNumber}
+                        </Box>
+                      )}
                       {typeof s.score === "number" && (
                         <Box component="span" sx={{ color: "#6f7670" }}>
                           {s.score.toFixed(3)}
@@ -227,6 +280,36 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                           </span>
                         </>
                       )}
+                      {onOpenCitation && (
+                        <Box
+                          component="button"
+                          type="button"
+                          onClick={() =>
+                            onOpenCitation(message.sources![expandedSource])
+                          }
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            ml: "auto",
+                            background: "none",
+                            border: "none",
+                            p: 0,
+                            fontFamily: "inherit",
+                            fontSize: 11,
+                            letterSpacing: "0.5px",
+                            color: "#c8a96a",
+                            cursor: "pointer",
+                            "&:hover": { textDecoration: "underline" },
+                          }}
+                        >
+                          <OpenInNewIcon sx={{ fontSize: 13 }} />
+                          {typeof message.sources[expandedSource]
+                            .pageNumber === "number"
+                            ? `open at page ${message.sources[expandedSource].pageNumber}`
+                            : "open document"}
+                        </Box>
+                      )}
                     </Box>
                     <Typography
                       sx={{
@@ -244,7 +327,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           <Typography sx={{ fontSize: 15, lineHeight: 1.7, color: "#d8d4c8", maxWidth: 700, whiteSpace: "pre-wrap" }}>
-            {message.content}
+            {renderAnswerText(message.content, message.sources, onOpenCitation)}
           </Typography>
 
           <Box sx={{ display: "flex", gap: 0.75, mt: 0.5 }}>

@@ -1,6 +1,6 @@
 import React from "react";
 import { Box } from "@mui/material";
-import { Message } from "./types";
+import { Message, SourceRef } from "./types";
 import { MessageBubble } from "./MessageBubble";
 
 interface MessageListProps {
@@ -10,6 +10,8 @@ interface MessageListProps {
   // Conversation-aware follow-up prompts, shown under the latest answer.
   suggestions?: string[];
   onSelectSuggestion?: (prompt: string) => void;
+  // Opens a citation's original document in the side viewer.
+  onOpenCitation?: (source: SourceRef) => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -18,6 +20,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   isLoading,
   suggestions,
   onSelectSuggestion,
+  onOpenCitation,
 }) => {
   const endRef = React.useRef<HTMLDivElement>(null);
 
@@ -57,6 +60,7 @@ export const MessageList: React.FC<MessageListProps> = ({
             <MessageBubble
               key={message.id}
               message={message}
+              onOpenCitation={onOpenCitation}
               onRegenerate={
                 onRegenerate &&
                 isLast &&

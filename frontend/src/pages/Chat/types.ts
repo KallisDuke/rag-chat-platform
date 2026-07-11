@@ -11,6 +11,9 @@ export interface SourceRef {
   // conversations may only have `source`.
   content?: string;
   score?: number;
+  // Page in the original document (PDFs only) — used by the citation viewer
+  // to open the file at the cited page.
+  pageNumber?: number;
 }
 
 export interface ChatTurn {
