@@ -134,9 +134,11 @@ router.delete(
         return res.status(400).json({ error: "source is required" });
       }
 
-      const deletedChunks = await deleteLibraryDocument(source);
+      const { deletedChunks, deletedJobs } = await deleteLibraryDocument(source);
 
-      if (deletedChunks === 0) {
+      // A failed/queued upload has job records but no chunks yet — deleting it
+      // is still a successful removal from the library.
+      if (deletedChunks === 0 && deletedJobs === 0) {
         return res.status(404).json({ error: "Document not found" });
       }
 

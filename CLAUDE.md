@@ -22,6 +22,7 @@ All commands are run from inside `backend/` or `frontend/` respectively (no root
 ### Backend (`backend/`)
 
 - `npm run dev` — start the API with `tsx watch src/server.ts` (auto-restarts on change)
+- `npm run dev:worker` — start the SQS ingest worker standalone (`tsx watch src/worker.ts`); requires the S3+SQS env vars and pairs with `INGEST_WORKER=off` on the API
 - `npm run typecheck` — `tsc --noEmit`
 - `npm test` — not implemented (placeholder script that exits with an error)
 - No lint script/config exists in this project.
@@ -44,6 +45,8 @@ The backend reads from `backend/.env` (no `.env.example` checked in). Required k
 
 Optional S3 keys for original-file storage (powers the chat citation viewer): `AWS_REGION`, `S3_BUCKET_NAME`, plus credentials via the standard AWS chain (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`). Without them the app works normally but originals aren't stored and `GET /library/file` returns 404 (`src/utils/s3.ts` — `isS3Configured()`).
 
+Optional `SQS_QUEUE_URL` (with `AWS_REGION` + the S3 keys above) enables asynchronous ingestion: uploads are stored in S3, recorded as jobs, and queued to SQS; a background worker does the parsing/embedding/indexing. By default the worker runs inside the API process; set `INGEST_WORKER=off` on the API and run `src/worker.ts` as its own process (`npm run dev:worker` locally, `Dockerfile.worker` in production) to consume the queue from a separate, independently sized deployment. Without SQS (or without S3), uploads are ingested synchronously inside the request as before. The queue should be a standard queue with a generous visibility timeout (~15 min) and a dead-letter queue redrive policy (`maxReceiveCount` ~3); the IAM user needs `sqs:SendMessage`, `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:GetQueueAttributes`. Job records live in `INGEST_JOB_COLLECTION_NAME` (defaults to `rag_ingest_jobs`).
+
 ## Architecture
 
 ### Backend: RAG pipeline over MongoDB Atlas Vector Search
@@ -51,10 +54,13 @@ Optional S3 keys for original-file storage (powers the chat citation viewer): `A
 - `src/server.ts` — Express app entry point. Mounts `/upload`, `/query`, `/login`, and `/health`. Connects to MongoDB before binding the port.
 - `src/db/mongo.ts` — single shared `Db` instance via `connectDB()`/`getDB()`. `getDB()` throws if called before `connectDB()` resolves, so route/service code assumes the connection is already established.
 - `src/utils/embeddings.ts` — single shared `OpenAIEmbeddings` instance (`text-embedding-3-small`), imported by both ingest and query paths to keep embedding behavior consistent.
-- `src/services/ingest.ts` — chunks input text with `RecursiveCharacterTextSplitter` (1000/200 overlap), embeds each chunk, and inserts one Mongo document per chunk (`content`, `embedding`, `source`, `sizeBytes`, optional `pageNumber`, `createdAt`) into `COLLECTION_NAME`. PDFs are chunked per page so each chunk records its page for citation deep-linking.
+- `src/services/ingest.ts` — chunks input text with `RecursiveCharacterTextSplitter` (1000/200 overlap), embeds all chunks in one batched `embedDocuments` call, and bulk-inserts one Mongo document per chunk (`content`, `embedding`, `source`, `sizeBytes`, optional `pageNumber`, `createdAt`) into `COLLECTION_NAME` via `insertMany`. PDFs are chunked per page so each chunk records its page for citation deep-linking. Re-ingesting a source first deletes its existing chunks (replace, not append) — this is what makes queued retries idempotent.
+- `src/services/extract.ts` — shared text extraction (PDF via `pdf-parse`, `.docx` via `mammoth`, plaintext-like extensions as UTF-8) used by both the upload route's synchronous path and the ingest worker.
 - `src/utils/s3.ts` — optional S3 storage for original uploads, keyed `documents/<source>`. Uploads store the original before ingesting; `GET /library/file?source=...` streams it back (proxied through the backend so the bucket stays private, no CORS needed); deleting a library document also deletes the original (best effort).
+- Async ingestion (active when S3 **and** SQS are configured): `src/utils/sqs.ts` (queue client mirroring `s3.ts`'s optional-config pattern), `src/services/ingestJobs.ts` (job records: `queued` → `processing` → `done`/`failed`, latest-job-per-source drives library status), and `src/services/ingestWorker.ts` (long-polling SQS consumer; fetches the original from S3, extracts, ingests, marks the job, deletes the message; on failure it leaves the message for SQS redelivery/DLQ and records the error on the job). The consumer starts from `server.ts` after `connectDB()` unless `INGEST_WORKER=off`, or runs standalone via `src/worker.ts` (fails fast if S3/SQS are unconfigured; built by `Dockerfile.worker` for isolated deployment).
 - `src/services/rag.ts` — embeds the incoming question, runs a `$vectorSearch` aggregation against the same collection (index name `vector_index`, must exist in Atlas), concatenates retrieved chunk content into a context block, and asks `ChatOpenAI` (`gpt-4.1-mini`) to answer using only that context. Returns `{ answer, sources }`.
-- `src/routes/upload.ts` — accepts either raw `text` in the body and/or multipart files (`multer`, memory storage, 10MB/10-file limit). PDFs are parsed via `pdf-parse`; plaintext-like extensions are decoded as UTF-8; anything else is rejected. Each document/file is run through `ingestDocument` independently and per-source chunk counts are returned.
+- `src/routes/upload.ts` — accepts either raw `text` in the body and/or multipart files (`multer`, memory storage, 10MB/10-file limit); unsupported types are rejected up front via `isSupportedFileType`. With S3+SQS configured it stores originals, creates jobs, enqueues them, and returns `202` with `status: "queued"` per document; otherwise it ingests synchronously in-request and returns per-source chunk counts.
+- `src/services/library.ts` — `GET /library` merges the chunk aggregation with the latest ingest job per source, so each document carries a `status` (`indexed`/`queued`/`processing`/`failed`, plus `error` when failed). Deleting a document removes its chunks and its job records.
 - `src/routes/query.ts` — thin wrapper around `askQuestion`, protected by `authMiddleware`.
 - `src/routes/auth.ts` — `/login` looks up a user by **exact email+password match** in `USER_COLLECTION_NAME` (no hashing) and issues a 1-hour JWT containing `userId`/`email`.
 - `src/middleware/auth.ts` — validates `Authorization: Bearer <token>` against `JWT_SECRET` and attaches `req.user`.

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Box, IconButton, InputBase, Typography } from "@mui/material";
+import { Box, CircularProgress, IconButton, InputBase, Typography } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { LibraryDocument } from "./types";
@@ -170,7 +170,10 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
 
         {!loading &&
           !error &&
-          paged.map((doc, index) => (
+          paged.map((doc, index) => {
+            const isPending = doc.status === "queued" || doc.status === "processing";
+
+            return (
             <Box
               key={doc.source}
               sx={{
@@ -213,16 +216,35 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
                 >
                   {doc.source}
                 </Box>
-                <Box sx={{ fontSize: 12, color: "#6f7670" }}>
-                  {doc.chunks} chunk{doc.chunks === 1 ? "" : "s"}
-                </Box>
+                {doc.status === "failed" ? (
+                  <Box
+                    title={doc.error}
+                    sx={{
+                      fontSize: 12,
+                      color: "#c87a5a",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    failed{doc.error ? ` — ${doc.error}` : ""}
+                  </Box>
+                ) : isPending ? (
+                  <Box sx={{ fontSize: 12, color: "#c8a96a" }}>{doc.status}…</Box>
+                ) : (
+                  <Box sx={{ fontSize: 12, color: "#6f7670" }}>
+                    {doc.chunks} chunk{doc.chunks === 1 ? "" : "s"}
+                  </Box>
+                )}
               </Box>
               <Box sx={{ textAlign: "right", fontSize: 13, color: "#8a9088", fontVariantNumeric: "tabular-nums" }}>
                 {formatFileSize(doc.sizeBytes)}
               </Box>
               <Box sx={{ fontSize: 13, color: "#8a9088" }}>{formatIndexedDate(doc.indexedAt)}</Box>
               <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", justifyContent: "flex-end" }}>
-                {admin ? (
+                {isPending ? (
+                  <CircularProgress size={14} sx={{ color: "#c8a96a" }} />
+                ) : admin ? (
                   <IconButton
                     size="small"
                     title="Delete document"
@@ -239,11 +261,21 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
                     <DeleteOutlineIcon sx={{ fontSize: 17 }} />
                   </IconButton>
                 ) : (
-                  <Box component="span" title="indexed" sx={{ width: 7, height: 7, backgroundColor: "#6fbf73", borderRadius: "50%" }} />
+                  <Box
+                    component="span"
+                    title={doc.status === "failed" ? doc.error ?? "failed" : "indexed"}
+                    sx={{
+                      width: 7,
+                      height: 7,
+                      backgroundColor: doc.status === "failed" ? "#c87a5a" : "#6fbf73",
+                      borderRadius: "50%",
+                    }}
+                  />
                 )}
               </Box>
             </Box>
-          ))}
+            );
+          })}
       </Box>
       </Box>
 
@@ -327,9 +359,11 @@ export const LibraryTable: React.FC<LibraryTableProps> = ({
               Permanently delete{" "}
               <Box component="span" sx={{ color: "#ece8df", fontWeight: 600 }}>
                 {pendingDoc.source}
-              </Box>{" "}
-              and all {pendingDoc.chunks} indexed chunk
-              {pendingDoc.chunks === 1 ? "" : "s"}? This cannot be undone.
+              </Box>
+              {pendingDoc.chunks > 0
+                ? ` and all ${pendingDoc.chunks} indexed chunk${pendingDoc.chunks === 1 ? "" : "s"}`
+                : ""}
+              ? This cannot be undone.
             </>
           )
         }

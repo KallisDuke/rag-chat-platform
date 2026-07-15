@@ -47,30 +47,58 @@ export const ingestDocument = async (
           .map((page) => ({ text: page.text, pageNumber: page.pageNumber }))
       : [{ text }];
 
-  const collection = getDB().collection<StoredDocumentChunk>(collectionName);
-
-  let totalChunks = 0;
+  // Split everything up front so all chunks go to the embeddings API in one
+  // batched call instead of one request per chunk.
+  const pending: { content: string; pageNumber?: number }[] = [];
 
   for (const part of parts) {
     const chunks = await splitter.createDocuments([part.text]);
 
     for (const chunk of chunks) {
-      const vector = await embeddings.embedQuery(chunk.pageContent);
-
-      await collection.insertOne({
+      pending.push({
         content: chunk.pageContent,
-        embedding: vector,
-        source: fileName,
-        sizeBytes,
         ...(typeof part.pageNumber === "number"
           ? { pageNumber: part.pageNumber }
           : {}),
-        createdAt: new Date(),
       });
     }
-
-    totalChunks += chunks.length;
   }
 
-  return totalChunks;
+  const collection = getDB().collection<StoredDocumentChunk>(collectionName);
+
+  // Re-ingesting a source replaces its chunks instead of duplicating them.
+  // This also makes the queue worker idempotent: a retried or redelivered job
+  // cleans up whatever a previous partial attempt left behind.
+  await collection.deleteMany({ source: fileName });
+
+  if (pending.length === 0) {
+    return 0;
+  }
+
+  const vectors = await embeddings.embedDocuments(
+    pending.map((chunk) => chunk.content),
+  );
+
+  if (vectors.length !== pending.length) {
+    throw new Error(
+      `Embedding count mismatch for "${fileName}": expected ${pending.length}, got ${vectors.length}.`,
+    );
+  }
+
+  const createdAt = new Date();
+
+  await collection.insertMany(
+    pending.map((chunk, index) => ({
+      content: chunk.content,
+      embedding: vectors[index]!,
+      source: fileName,
+      sizeBytes,
+      ...(typeof chunk.pageNumber === "number"
+        ? { pageNumber: chunk.pageNumber }
+        : {}),
+      createdAt,
+    })),
+  );
+
+  return pending.length;
 };

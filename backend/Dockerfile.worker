@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+
+# Production image for the SQS ingest worker (src/worker.ts), deployable
+# independently of the API (Dockerfile.prod). Same build layout — the app runs
+# TypeScript sources directly via `tsx`, so there is no `tsc` build step.
+#
+# The worker serves no HTTP traffic, so there is no EXPOSE and no HTTP
+# healthcheck: it fails fast on missing config and exits on fatal errors, and
+# the orchestrator (ECS/Kubernetes/compose restart policy) restarts it.
+
+# ---- deps: install production dependencies only ----
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# ---- runtime ----
+FROM node:22-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+
+# Production node_modules (includes tsx, excludes typescript and @types)
+COPY --from=deps /app/node_modules ./node_modules
+COPY package*.json ./
+COPY tsconfig.json ./
+COPY src ./src
+
+# Run as the unprivileged user shipped with the node image
+USER node
+
+# Secrets/config are injected at runtime: MONGODB_URI, DB_NAME,
+# COLLECTION_NAME, OPENAI_API_KEY, AWS_REGION, S3_BUCKET_NAME, SQS_QUEUE_URL,
+# optional INGEST_JOB_COLLECTION_NAME. AWS credentials come from the standard
+# chain (env keys locally, an IAM task/pod role in AWS) — never baked in.
+CMD ["node_modules/.bin/tsx", "src/worker.ts"]

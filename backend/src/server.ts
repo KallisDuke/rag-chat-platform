@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { connectDB } from "./db/mongo.ts";
+import { startIngestWorker } from "./services/ingestWorker.ts";
 import uploadRouter from "./routes/upload.ts";
 import queryRouter from "./routes/query.ts";
 import suggestionsRouter from "./routes/suggestions.ts";
@@ -30,6 +31,14 @@ app.get("/health", (req, res) => {
 
 const start = async () => {
   await connectDB();
+
+  // Background consumer for queued document ingestion (no-op unless S3 + SQS
+  // are configured). Started after connectDB so getDB() is safe inside it.
+  // Set INGEST_WORKER=off when a dedicated worker process (src/worker.ts)
+  // consumes the queue instead of the API.
+  if (process.env.INGEST_WORKER !== "off") {
+    startIngestWorker();
+  }
 
   app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
