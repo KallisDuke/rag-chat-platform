@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Box, CssBaseline, Typography } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { UploadTopBar } from "./UploadTopBar";
@@ -21,6 +21,10 @@ const darkTheme = createTheme({
 
 const API_BASE = API_BASE_URL;
 
+// While any document is still queued/processing on the backend, the library
+// is re-fetched at this interval so status chips update live.
+const POLL_INTERVAL_MS = 3000;
+
 export const UploadPage: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [documents, setDocuments] = useState<LibraryDocument[]>([]);
@@ -29,6 +33,21 @@ export const UploadPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchLibrary = useCallback(async (): Promise<LibraryResponse> => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API_BASE}/library`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error(`Failed to load library: ${response.statusText}`);
+    return (await response.json()) as LibraryResponse;
+  }, []);
+
+  const applyLibrary = useCallback((data: LibraryResponse) => {
+    setDocuments(data.documents);
+    setTotalDocuments(data.totalDocuments);
+    setTotalChunks(data.totalChunks);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -36,16 +55,9 @@ export const UploadPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem("token");
-        const response = await fetch(`${API_BASE}/library`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error(`Failed to load library: ${response.statusText}`);
-        const data: LibraryResponse = await response.json();
+        const data = await fetchLibrary();
         if (cancelled) return;
-        setDocuments(data.documents);
-        setTotalDocuments(data.totalDocuments);
-        setTotalChunks(data.totalChunks);
+        applyLibrary(data);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load library");
       } finally {
@@ -57,7 +69,32 @@ export const UploadPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, fetchLibrary, applyLibrary]);
+
+  const hasPendingDocuments = documents.some(
+    (doc) => doc.status === "queued" || doc.status === "processing",
+  );
+
+  // Silent background poll — no loading state, so rows don't flash while a
+  // queued document works its way through the ingest worker.
+  useEffect(() => {
+    if (!hasPendingDocuments) return;
+
+    let cancelled = false;
+    const id = setInterval(async () => {
+      try {
+        const data = await fetchLibrary();
+        if (!cancelled) applyLibrary(data);
+      } catch {
+        // Keep showing the last good data; the next tick retries.
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [hasPendingDocuments, fetchLibrary, applyLibrary]);
 
   const handleDelete = async (source: string) => {
     const token = localStorage.getItem("token");

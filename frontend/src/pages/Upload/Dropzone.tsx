@@ -54,11 +54,19 @@ export const Dropzone: React.FC<DropzoneProps> = ({ onUploaded }) => {
         body: formData,
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        throw new Error(data?.error ?? `Upload failed: ${response.statusText}`);
       }
 
-      setSuccess(`Indexed ${selectedFiles.length} file(s)`);
+      // The backend says whether files were indexed inline or queued for the
+      // background worker — surface its message rather than guessing.
+      setSuccess(
+        typeof data?.message === "string"
+          ? data.message
+          : `Indexed ${selectedFiles.length} file(s)`,
+      );
       setSelectedFiles([]);
       if (inputRef.current) inputRef.current.value = "";
       onUploaded();

@@ -1,12 +1,17 @@
-import path from "node:path";
-
 import express, { type Request, type Response } from "express";
-import mammoth from "mammoth";
 import multer from "multer";
-import { PDFParse } from "pdf-parse";
 
-import { ingestDocument, type PageText } from "../services/ingest.ts";
+import {
+  extractTextContent,
+  isSupportedFileType,
+} from "../services/extract.ts";
+import { ingestDocument } from "../services/ingest.ts";
+import {
+  createIngestJob,
+  markIngestJobFailed,
+} from "../services/ingestJobs.ts";
 import { isS3Configured, uploadOriginalFile } from "../utils/s3.ts";
+import { enqueueIngestJob, isSqsConfigured } from "../utils/sqs.ts";
 import { authMiddleware } from "../middleware/auth.ts";
 
 const router = express.Router();
@@ -14,7 +19,7 @@ const router = express.Router();
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 15 * 1024 * 1024,
     files: 10,
   },
 });
@@ -27,11 +32,13 @@ interface UploadRequestBody {
 interface IngestedDocument {
   source: string;
   chunks: number;
+  status: "indexed" | "queued";
 }
 
 interface UploadResponse {
   success: boolean;
   message: string;
+  queued: boolean;
   documents: IngestedDocument[];
 }
 
@@ -39,17 +46,11 @@ interface ErrorResponse {
   error: string;
 }
 
-const textFileExtensions = new Set([
-  ".csv",
-  ".html",
-  ".json",
-  ".log",
-  ".md",
-  ".rtf",
-  ".text",
-  ".txt",
-  ".xml",
-]);
+// Async ingestion needs both pieces: S3 to hold the bytes after the HTTP
+// request ends, and SQS to hand the work to the background worker. With
+// either missing, uploads fall back to synchronous in-request ingestion.
+const isAsyncIngestEnabled = (): boolean =>
+  isS3Configured() && isSqsConfigured();
 
 const getUploadedFiles = (req: Request): Express.Multer.File[] => {
   if (!req.files) {
@@ -59,66 +60,88 @@ const getUploadedFiles = (req: Request): Express.Multer.File[] => {
   return Array.isArray(req.files) ? req.files : Object.values(req.files).flat();
 };
 
-interface ExtractedContent {
-  text: string;
-  // Per-page text for PDFs, so chunks can record their page for citation
-  // deep-linking. Absent for plain-text files.
-  pages?: PageText[];
+// Raw text submissions and multipart files are normalized into the same shape
+// so both ingestion paths treat them identically.
+interface PendingUpload {
+  source: string;
+  buffer: Buffer;
+  contentType: string;
+  sizeBytes: number;
 }
 
-const extractFileContent = async (
-  file: Express.Multer.File,
-): Promise<ExtractedContent> => {
-  const extension = path.extname(file.originalname).toLowerCase();
+const collectPendingUploads = (req: Request): PendingUpload[] => {
+  const body = (req.body ?? {}) as UploadRequestBody;
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  const uploads: PendingUpload[] = [];
 
-  if (file.mimetype === "application/pdf" || extension === ".pdf") {
-    const parser = new PDFParse({ data: file.buffer });
+  if (text) {
+    const source = body.source?.trim() || "submitted-text.txt";
+    const buffer = Buffer.from(text, "utf8");
 
-    try {
-      const result = await parser.getText();
-
-      return {
-        text: result.text,
-        pages: result.pages.map((page) => ({
-          pageNumber: page.num,
-          text: page.text,
-        })),
-      };
-    } finally {
-      await parser.destroy();
-    }
+    uploads.push({
+      source,
+      buffer,
+      contentType: "text/plain; charset=utf-8",
+      sizeBytes: buffer.byteLength,
+    });
   }
 
-  if (
-    file.mimetype ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    extension === ".docx"
-  ) {
-    const result = await mammoth.extractRawText({ buffer: file.buffer });
-
-    return { text: result.value };
+  for (const file of getUploadedFiles(req)) {
+    uploads.push({
+      source: file.originalname,
+      buffer: file.buffer,
+      contentType: file.mimetype || "application/octet-stream",
+      sizeBytes: file.size,
+    });
   }
 
-  if (file.mimetype.startsWith("text/") || textFileExtensions.has(extension)) {
-    return { text: file.buffer.toString("utf8") };
-  }
-
-  throw new Error(
-    `Unsupported file type for "${file.originalname}". Upload a PDF, Word (.docx), or text-based file.`,
-  );
+  return uploads;
 };
 
-// Keep a copy of the original bytes in S3 (keyed by source) so the chat's
-// citation viewer can open the real document later. Stored before ingesting so
-// a storage failure doesn't leave chunks pointing at a missing original.
-const storeOriginal = async (
-  source: string,
-  body: Buffer,
-  contentType: string,
-): Promise<void> => {
-  if (!isS3Configured()) return;
+// Queue path: store the original in S3, record a job, enqueue it, and return
+// immediately — the worker does the parsing/embedding in the background.
+const queueUpload = async (upload: PendingUpload): Promise<void> => {
+  await uploadOriginalFile(upload.source, upload.buffer, upload.contentType);
 
-  await uploadOriginalFile(source, body, contentType);
+  const jobId = await createIngestJob({
+    source: upload.source,
+    contentType: upload.contentType,
+    sizeBytes: upload.sizeBytes,
+  });
+
+  try {
+    await enqueueIngestJob({ jobId, source: upload.source });
+  } catch (error) {
+    // No message means no worker will ever pick this job up — mark it failed
+    // so the library doesn't show a permanently "queued" document.
+    await markIngestJobFailed(jobId, "Failed to enqueue ingest job").catch(
+      () => {},
+    );
+    throw error;
+  }
+};
+
+// Synchronous path (no S3/SQS): parse, embed, and index inside the request,
+// exactly as before the queue existed.
+const ingestUploadNow = async (upload: PendingUpload): Promise<number> => {
+  const { text, pages } = await extractTextContent(
+    upload.buffer,
+    upload.source,
+    upload.contentType,
+  );
+
+  if (!text.trim()) {
+    throw new Error(`No readable text found in "${upload.source}".`);
+  }
+
+  // Keep a copy of the original bytes in S3 (keyed by source) so the chat's
+  // citation viewer can open the real document later. Stored before ingesting
+  // so a storage failure doesn't leave chunks pointing at a missing original.
+  if (isS3Configured()) {
+    await uploadOriginalFile(upload.source, upload.buffer, upload.contentType);
+  }
+
+  return ingestDocument(text.trim(), upload.source, upload.sizeBytes, pages);
 };
 
 router.post(
@@ -134,48 +157,50 @@ router.post(
     res: Response<UploadResponse | ErrorResponse>,
   ): Promise<Response<UploadResponse | ErrorResponse>> => {
     try {
-      const documents: IngestedDocument[] = [];
-      const body = req.body ?? {};
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      const files = getUploadedFiles(req);
+      const uploads = collectPendingUploads(req);
 
-      if (!text && files.length === 0) {
+      if (uploads.length === 0) {
         return res.status(400).json({
           error:
             'Provide "text" in the request body and/or upload one or more files.',
         });
       }
 
-      if (text) {
-        const source = body.source?.trim() || "submitted-text.txt";
-        const buffer = Buffer.from(text, "utf8");
-
-        await storeOriginal(source, buffer, "text/plain; charset=utf-8");
-
-        const chunks = await ingestDocument(text, source, buffer.byteLength);
-        documents.push({ source, chunks });
+      // Reject unsupported files before anything is stored or queued so the
+      // user hears about it immediately in both ingestion paths.
+      for (const upload of uploads) {
+        if (!isSupportedFileType(upload.source, upload.contentType)) {
+          return res.status(400).json({
+            error:
+              `Unsupported file type for "${upload.source}". Upload a PDF, ` +
+              "Word (.docx), or text-based file.",
+          });
+        }
       }
 
-      for (const file of files) {
-        const { text: fileText, pages } = await extractFileContent(file);
+      const documents: IngestedDocument[] = [];
 
-        if (!fileText.trim()) {
-          throw new Error(`No readable text found in "${file.originalname}".`);
+      if (isAsyncIngestEnabled()) {
+        for (const upload of uploads) {
+          await queueUpload(upload);
+          documents.push({
+            source: upload.source,
+            chunks: 0,
+            status: "queued",
+          });
         }
 
-        await storeOriginal(
-          file.originalname,
-          file.buffer,
-          file.mimetype || "application/octet-stream",
-        );
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message: `Queued ${documents.length} document(s) for indexing`,
+          documents,
+        });
+      }
 
-        const chunks = await ingestDocument(
-          fileText.trim(),
-          file.originalname,
-          file.size,
-          pages,
-        );
-        documents.push({ source: file.originalname, chunks });
+      for (const upload of uploads) {
+        const chunks = await ingestUploadNow(upload);
+        documents.push({ source: upload.source, chunks, status: "indexed" });
       }
 
       const totalChunks = documents.reduce(
@@ -185,6 +210,7 @@ router.post(
 
       return res.json({
         success: true,
+        queued: false,
         message: `Ingested ${documents.length} document(s) in ${totalChunks} chunk(s)`,
         documents,
       });
